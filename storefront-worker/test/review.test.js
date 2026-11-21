@@ -4,6 +4,7 @@ import { reviewRequestDueAt } from '../src/reviewSchedule.js';
 import { reviewRoute } from '../src/review.js';
 import { reviewRequestEmail } from '../src/mail.js';
 import { dispatchedAt } from '../src/fulfillment.js';
+import { processDueReviewRequests } from '../src/reviewRequests.js';
 
 test('active Worker review mail uses the face-reveal invitation', () => {
   const email = reviewRequestEmail({ id: 'sample-order' });
@@ -23,6 +24,11 @@ test('review request waits at least 14 transit days and seven reading days', () 
 test('BookVault dispatch flag wins even when Progress.Status is Invoiced', () => {
   assert.equal(dispatchedAt({ Status: 'Invoiced', IsDispatched: true, Dispatched: '2026-11-02T09:00:00' }), '2026-11-02T09:00:00.000Z');
   assert.equal(dispatchedAt({ Status: 'Invoiced', IsDispatched: false, Dispatched: null }), null);
+});
+
+test('review scheduler does not query or send without a real postal address', async () => {
+  const env = { FULFILLMENT_ENABLED: 'true', DB: { prepare: () => { throw new Error('should not query'); } } };
+  assert.equal(await processDueReviewRequests(env), 0);
 });
 
 test('review unsubscribe GET has no mutation and POST suppresses future mail', async () => {

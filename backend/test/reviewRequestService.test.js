@@ -56,6 +56,23 @@ test('checkout review preference defaults off and only accepts a boolean', () =>
   assert.deepEqual(validateCheckoutInput({ ...body, review_request_opt_in: true }), {});
   assert.equal(validateCheckoutInput({ ...body, review_request_opt_in: 'true' }).review_request_opt_in,
     'Review email preference must be true or false.');
+  assert.deepEqual(validateCheckoutInput({ ...body, review_request_opt_out: false }), {});
+  assert.equal(validateCheckoutInput({ ...body, review_request_opt_out: 'false' }).review_request_opt_out,
+    'Review email preference must be true or false.');
+  assert.equal(validateCheckoutInput({ ...body, review_request_opt_in: true, review_request_opt_out: false }).review_request_opt_out,
+    'Choose only one review email preference.');
+});
+
+test('new checkout opt-out controls follow-up eligibility without changing legacy orders', () => {
+  const base = {
+    customer_name: 'Ava Reader', phone: '+12025550123', country_code: 'US',
+    street1: '1 Example Road', city: 'Austin', state: 'TX', postal_code: '78701',
+    quantity: 1, bookPriceCents: 6500, shippingPriceCents: 999,
+    totalPriceCents: 7499, currency: 'usd',
+  };
+  assert.equal(orderService.createOrder({ ...base, email: 'allowed@example.test', review_request_opt_out: false }).review_request_opt_in, 1);
+  assert.equal(orderService.createOrder({ ...base, email: 'declined@example.test', review_request_opt_out: true }).review_request_opt_in, 0);
+  assert.equal(orderService.createOrder({ ...base, email: 'legacy@example.test', review_request_opt_in: false }).review_request_opt_in, 0);
 });
 
 test('only opted-in shipped paid orders receive one review email after their due date', async () => {

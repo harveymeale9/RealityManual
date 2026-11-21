@@ -24400,5 +24400,13 @@ real `MARKETING_POSTAL_ADDRESS` setting; the HTML and plain-text email include
 that address next to the unsubscribe. Do not invent or expose Harvey's home
 address. This is a deliberate activation gate until Harvey provides a suitable
 business mailing address or PO Box. Backend and Worker test suites passed
-(58/58 and 33/33). Apply the D1 `2026-11-21-bookvault-dispatch.sql` migration
-before deploying the Worker code.
+(59/59 and 34/34). The D1 `2026-11-21-bookvault-dispatch.sql` migration was
+applied before deploying Worker version `2f7bed6c-9a15-4a7e-9743-f907e0d278e5`.
+The live API health returned checkout enabled; the paused VPS fallback was
+rebuilt as `rm-storefront-backend:followup-dispatch` and its health returned OK.
+The first five-minute Worker sweep marked ten real orders `SHIPPED`, each with
+the true dispatch timestamp and a recent shipping notice; no new error log
+entries appeared. The updated checkout and JavaScript were verified on the
+public site with the opt-out present and both old opt-in boxes absent. Customer
+review mail remains deliberately gated until a real business mailing address
+is configured.
