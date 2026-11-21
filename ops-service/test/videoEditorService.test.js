@@ -296,6 +296,8 @@ test('decision previews stay tiny while production masters preserve native resol
   assert.deepEqual(editor.renderShapeForProject({ width: 2160, height: 3840 }, 'vertical', true), { width: 2160, height: 3840 });
   assert.deepEqual(editor.renderShapeForProject({ width: 1920, height: 1080 }, 'horizontal', true), { width: 1920, height: 1080 });
   assert.deepEqual(editor.renderShapeForProject({ width: 1920, height: 1080 }, 'vertical', true), { width: 606, height: 1080 });
+  assert.deepEqual(editor.renderShapeForProject({ width: 1080, height: 1920, topCropFraction: 0.25 }, 'vertical', false), { width: 540, height: 720 });
+  assert.deepEqual(editor.renderShapeForProject({ width: 1080, height: 1920, topCropFraction: 0.25 }, 'vertical', true), { width: 1080, height: 1440 });
 });
 
 test('horizontal outros fade within 1.7 seconds and reserve only a music-backed black tail', function () {
@@ -596,6 +598,8 @@ test('metadata-only editor changes preserve a verified render', function () {
   assert.equal(editor.patchAffectsRender({ manualTrimCuts: [{ start: 1, end: 2 }] }), true);
   assert.equal(editor.patchAffectsRender({ layoutOverride: 'vertical' }), true);
   assert.equal(editor.patchAffectsRender({ openingPushInEnabled: false }), true);
+  assert.equal(editor.patchAffectsRender({ topCropFraction: 0.25 }), true);
+  assert.equal(editor.patchAffectsRender({ phoneAudioEnhancement: true }), true);
   assert.equal(editor.patchAffectsRender({ voiceGainAdjustments: [{ start: 15.49, gainDb: -2.93 }] }), true);
   assert.equal(editor.patchAffectsRender({ punchIns: [{ start: 1, end: 2 }] }), false);
   assert.equal(editor.patchNeedsAutoRender({ renderStatus: 'ready' }, false), false);

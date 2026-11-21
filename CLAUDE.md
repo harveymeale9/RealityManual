@@ -23917,3 +23917,21 @@ the apparent ~1.7 GB threshold is an inference from two observed failures,
 not a claimed official platform limit. Focused tests cover fallback selection
 and a real short FFmpeg transcode. Verify the live Facebook post separately
 before marking the release complete.
+
+## One-recording Editor top crop and phone-voice cleanup (2026-11-21)
+
+For the customer thank-you/feedback recording `2edd5969`, Harvey requested
+that the opening push-in be removed, the empty ceiling above him be lopped
+off, and the phone audio improved. Editor now accepts two optional per-project
+render settings: `topCropFraction` (portrait-only, 0–0.4) and
+`phoneAudioEnhancement`. A 0.25 top crop makes this 1080×1920 phone frame a
+1080×1440 (3:4) master, with a matching 540×720 decision preview; it keeps
+the bottom of the shot and source original unchanged. The optional audio path
+high-passes at 80 Hz, applies restrained FFT noise reduction and normalizes
+dialogue to -18 LUFS/-2 dBTP. Both settings invalidate the old render and
+persist through the eventual Production master. They do not affect other
+recordings. The existing `openingPushInEnabled` setting disables the camera
+move for this one project. The requested crop was inspected on a real source
+frame before use, and the combined FFmpeg video/audio filters were exercised
+on a real five-second sample. The project-specific full render must still be
+verified before closing the manual revision.

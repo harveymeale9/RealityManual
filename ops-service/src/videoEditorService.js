@@ -83,7 +83,7 @@ const EDITOR_FFMPEG_THREADS = Math.max(1, Math.floor(Math.max(1, AVAILABLE_CPU_C
 
 function renderShapeForProject(project, layout, master) {
   if (!master) return layout === 'vertical'
-    ? { width: 404, height: 720 }
+    ? (Number(project && project.topCropFraction) > 0 ? { width: 540, height: 720 } : { width: 404, height: 720 })
     : { width: 720, height: 404 };
   const sourceWidth = Math.max(2, Number(project && (project.originalWidth || project.width)) || 1920);
   const sourceHeight = Math.max(2, Number(project && (project.originalHeight || project.height)) || 1080);
@@ -91,7 +91,9 @@ function renderShapeForProject(project, layout, master) {
     ? Math.min(sourceWidth, sourceHeight * 9 / 16)
     : Math.min(sourceWidth, sourceHeight * 16 / 9);
   const cropHeight = layout === 'vertical'
-    ? Math.min(sourceHeight, sourceWidth * 16 / 9)
+    ? (Number(project && project.topCropFraction) > 0
+      ? Math.min(sourceHeight * (1 - Number(project.topCropFraction)), sourceWidth * 4 / 3)
+      : Math.min(sourceHeight, sourceWidth * 16 / 9))
     : Math.min(sourceHeight, sourceWidth * 9 / 16);
   const scale = Math.min(1, 3840 / Math.max(cropWidth, cropHeight));
   return {
@@ -717,7 +719,7 @@ function advanceEditRevision(project) {
 function patchAffectsRender(body) {
   body = body && typeof body === 'object' ? body : {};
   return ['removedWordIndices', 'manualTrimCuts', 'wordCorrection', 'autoSilenceEnabled', 'restoredAutoCutIds', 'captionsEnabled',
-    'layoutOverride', 'openingPushInEnabled', 'silenceThresholdSeconds', 'retainedPauseSeconds', 'voiceGainAdjustments',
+    'layoutOverride', 'openingPushInEnabled', 'topCropFraction', 'phoneAudioEnhancement', 'silenceThresholdSeconds', 'retainedPauseSeconds', 'voiceGainAdjustments',
     'suppressedPageChangeCutKeys', 'outroFadeSeconds'].some(function (key) {
     return Object.prototype.hasOwnProperty.call(body, key);
   });
@@ -2450,7 +2452,10 @@ function setup(options) {
         // this stage a 24/25 fps phone recording is later timestamped as
         // 29.97 fps and its visual stream ends well before its audio.
         let videoFilter = '[' + inputIndex + ':v]trim=start=' + segment.start.toFixed(3) + ':end=' + segment.end.toFixed(3) + ',setpts=PTS-STARTPTS,fps=30000/1001';
-        if (layout === 'vertical') {
+        if (layout === 'vertical' && Number(project.topCropFraction) > 0 && segment.type === 'source') {
+          const topCropFraction = clamp(Number(project.topCropFraction), 0, 0.4);
+          videoFilter += ",crop=w=iw:h='trunc(ih*(1-" + topCropFraction.toFixed(3) + ")/2)*2':x=0:y='ih-oh'";
+        } else if (layout === 'vertical') {
           videoFilter += ",crop=w='min(iw\\,ih*9/16)':h='min(ih\\,iw*16/9)':x='(iw-ow)/2':y='(ih-oh)/2'";
         } else {
           videoFilter += ",crop=w='min(iw\\,ih*16/9)':h='min(ih\\,iw*9/16)':x='(iw-ow)/2':y='(ih-oh)/2'";
@@ -2504,8 +2509,11 @@ function setup(options) {
         ',fade=t=out:st=' + (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) + ':d=' + outro.visualFadeSeconds.toFixed(3) +
         ',fps=30000/1001[outv]');
       const requestedVoiceGain = voiceGainFilter(project.voiceGainAdjustments, contentDuration);
-      if (requestedVoiceGain) filters.push('[outa]' + requestedVoiceGain + '[leveledouta]');
-      filters.push('[' + (requestedVoiceGain ? 'leveledouta' : 'outa') + ']adelay=delays=' + Math.round(OPENING_PREROLL_SECONDS * 1000) +
+      const phoneAudioFilter = project.phoneAudioEnhancement === true
+        ? 'highpass=f=80,afftdn=nf=-35,loudnorm=I=-18:TP=-2:LRA=11' : '';
+      const voiceFilters = [requestedVoiceGain, phoneAudioFilter].filter(Boolean).join(',');
+      if (voiceFilters) filters.push('[outa]' + voiceFilters + '[leveledouta]');
+      filters.push('[' + (voiceFilters ? 'leveledouta' : 'outa') + ']adelay=delays=' + Math.round(OPENING_PREROLL_SECONDS * 1000) +
         ':all=1,apad=pad_dur=' + outro.totalSeconds.toFixed(3) + '[outaextended]');
       if (playbackSpeed !== 1) {
         filters.push('[outv]setpts=(PTS-STARTPTS)/' + playbackSpeed.toFixed(6) + '[spedv]');
@@ -3583,6 +3591,14 @@ function setup(options) {
     project.manualTrimCuts = nextManualTrimCuts;
     if (typeof (req.body && req.body.captionsEnabled) === 'boolean') project.captionsEnabled = req.body.captionsEnabled;
     if (typeof (req.body && req.body.openingPushInEnabled) === 'boolean') project.openingPushInEnabled = req.body.openingPushInEnabled;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'topCropFraction')) {
+      const crop = Number(req.body.topCropFraction);
+      if (!Number.isFinite(crop) || crop < 0 || crop > 0.4 || (req.body.layoutOverride || effectiveLayout(project)) !== 'vertical') {
+        return res.status(400).json({ error: 'invalid_top_crop', message: 'Portrait top crop must be between 0 and 40%.' });
+      }
+      project.topCropFraction = Number(crop.toFixed(3));
+    }
+    if (typeof (req.body && req.body.phoneAudioEnhancement) === 'boolean') project.phoneAudioEnhancement = req.body.phoneAudioEnhancement;
     if (['auto', 'vertical', 'horizontal'].includes(req.body && req.body.layoutOverride)) project.layoutOverride = req.body.layoutOverride;
     if (['auto', 'ultra_short', 'short', 'long_short', 'longform'].includes(req.body && req.body.contentTypeOverride)) project.contentTypeOverride = req.body.contentTypeOverride;
     if (typeof (req.body && req.body.audioTrackId) === 'string') {
