@@ -23932,10 +23932,15 @@ dialogue toward -18 LUFS with -4 dBTP encoder headroom, then explicitly
 resamples to 48 kHz with an explicit stereo layout (FFmpeg's dynamic loudnorm
 otherwise emitted 96 kHz AAC and its encoded true peak approached 0 dBTP;
 resampling without restoring the stereo layout made the downstream audio delay
-filter fail on the full multi-segment timeline). Both settings invalidate the old render and
-persist through the eventual Production master. They do not affect other
-recordings. The existing `openingPushInEnabled` setting disables the camera
-move for this one project. The requested crop was inspected on a real source
-frame before use, and the combined FFmpeg video/audio filters were exercised
-on a real five-second sample. The project-specific full render must still be
-verified before closing the manual revision.
+filter fail on the full multi-segment timeline). Both settings invalidate the
+old render and persist through the eventual Production master. They do not
+affect other recordings. The existing `openingPushInEnabled` setting disables
+the camera move for this one project. The requested crop was inspected on
+source frames from the beginning, middle and end before use; the final first,
+early and middle frames show the tighter composition without camera push-in.
+The real 190.958-second Editor preview reached `ready` with all built-in
+quality checks passing at 540×720, 48 kHz stereo AAC, measured -19.01 LUFS
+and -3.38 dBTP. Its file SHA-256 matches the saved verified hash, and the
+authenticated inline preview endpoint returned HTTP 206 for a byte-range
+request. The original 723 MB camera file was not modified. The recording
+remains in Editor for Harvey to review; nothing was published or approved.
