@@ -116,8 +116,8 @@ function renderShapeForProject(project, layout, master) {
 
 function renderOutroTiming(layout, includeMusicTail, requestedFadeSeconds) {
   const defaultFadeSeconds = layout === 'horizontal' ? HORIZONTAL_VISUAL_OUTRO_SECONDS : VIDEO_OUTRO_SECONDS;
-  const fadeSeconds = Number.isFinite(Number(requestedFadeSeconds)) && Number(requestedFadeSeconds) > 0
-    ? clamp(Number(requestedFadeSeconds), 0.3, 4) : defaultFadeSeconds;
+  const fadeSeconds = Number.isFinite(Number(requestedFadeSeconds)) && Number(requestedFadeSeconds) >= 0
+    ? (Number(requestedFadeSeconds) === 0 ? 0 : clamp(Number(requestedFadeSeconds), 0.3, 4)) : defaultFadeSeconds;
   if (layout !== 'horizontal') {
     return { visualFadeSeconds: fadeSeconds, totalSeconds: fadeSeconds, musicTailSeconds: 0 };
   }
@@ -2500,8 +2500,8 @@ function setup(options) {
           audioInputs.push('-stream_loop', '-1', '-i', roomTonePath);
           audioFilters.push('[1:a]volume=' + Number(roomTone.gainDb).toFixed(2) + 'dB,atrim=duration=' +
             (OPENING_PREROLL_SECONDS + contentDuration + outro.totalSeconds).toFixed(3) +
-            ',asetpts=PTS-STARTPTS,afade=t=out:st=' + (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) +
-            ':d=' + outro.visualFadeSeconds.toFixed(3) + '[roomtone]');
+            ',asetpts=PTS-STARTPTS' + (outro.visualFadeSeconds > 0 ? ',afade=t=out:st=' +
+            (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) + ':d=' + outro.visualFadeSeconds.toFixed(3) : '') + '[roomtone]');
           audioFilters.push('[extended][roomtone]amix=inputs=2:duration=first:normalize=0:dropout_transition=0[mixed]');
           finalLabel = 'mixed';
         }
@@ -2591,11 +2591,13 @@ function setup(options) {
         '[normalizedv]');
       if (project.captionsEnabled !== false) filters.push("[normalizedv]subtitles='" + assPath.replace(/'/g, "'\\''") + "'[captionedv]");
       else filters.push('[normalizedv]null[captionedv]');
-      // Avoid the abrupt end-card cut: hold the final composed frame, fade it
-      // to black, and keep a silent dialogue bed beneath the soundtrack tail.
-      filters.push('[captionedv]tpad=stop_mode=clone:stop_duration=' + outro.totalSeconds.toFixed(3) +
-        ',fade=t=out:st=' + (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) + ':d=' + outro.visualFadeSeconds.toFixed(3) +
-        ',fps=30000/1001[outv]');
+      // A zero outro ends on the final spoken frame. Otherwise hold and fade
+      // the composed frame as usual for the established publishing workflow.
+      filters.push('[captionedv]' + (outro.totalSeconds > 0 ?
+        'tpad=stop_mode=clone:stop_duration=' + outro.totalSeconds.toFixed(3) + ',' : '') +
+        (outro.visualFadeSeconds > 0 ? 'fade=t=out:st=' +
+        (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) + ':d=' + outro.visualFadeSeconds.toFixed(3) + ',' : '') +
+        'fps=30000/1001[outv]');
       const finalAudioLabel = roomTone ? 'roommixed' : 'outaextended';
       if (!audioCrossfadeSeconds) {
         const requestedVoiceGain = voiceGainFilter(project.voiceGainAdjustments, contentDuration);
@@ -2608,8 +2610,8 @@ function setup(options) {
           const toneInputIndex = 1 + readyClips.length;
           filters.push('[' + toneInputIndex + ':a]volume=' + Number(roomTone.gainDb).toFixed(2) +
             'dB,atrim=duration=' + (OPENING_PREROLL_SECONDS + contentDuration + outro.totalSeconds).toFixed(3) + ',asetpts=PTS-STARTPTS' +
-            ',afade=t=out:st=' + (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) +
-            ':d=' + outro.visualFadeSeconds.toFixed(3) + '[roomtone]');
+            (outro.visualFadeSeconds > 0 ? ',afade=t=out:st=' + (OPENING_PREROLL_SECONDS + contentDuration).toFixed(3) +
+            ':d=' + outro.visualFadeSeconds.toFixed(3) : '') + '[roomtone]');
           filters.push('[outaextended][roomtone]amix=inputs=2:duration=first:normalize=0:dropout_transition=0[roommixed]');
         }
       }
@@ -3599,8 +3601,9 @@ function setup(options) {
     const currentVoiceGainAdjustments = normalizeVoiceGainAdjustments(project.voiceGainAdjustments, project.duration);
     const currentOutroFadeSeconds = Number(project.outroFadeSeconds) || 0;
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'outroFadeSeconds') &&
-        (!Number.isFinite(Number(req.body.outroFadeSeconds)) || Number(req.body.outroFadeSeconds) < 0.3 || Number(req.body.outroFadeSeconds) > 4)) {
-      return res.status(400).json({ error: 'invalid_outro_fade', message: 'Fade to black must be between 0.3 and 4 seconds.' });
+        (!Number.isFinite(Number(req.body.outroFadeSeconds)) || Number(req.body.outroFadeSeconds) < 0 ||
+          (Number(req.body.outroFadeSeconds) > 0 && Number(req.body.outroFadeSeconds) < 0.3) || Number(req.body.outroFadeSeconds) > 4)) {
+      return res.status(400).json({ error: 'invalid_outro_fade', message: 'Fade to black must be off or between 0.3 and 4 seconds.' });
     }
     const nextOutroFadeSeconds = Object.prototype.hasOwnProperty.call(req.body || {}, 'outroFadeSeconds')
       ? Number(Number(req.body.outroFadeSeconds).toFixed(2)) : currentOutroFadeSeconds;

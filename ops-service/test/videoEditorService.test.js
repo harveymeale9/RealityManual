@@ -327,6 +327,9 @@ test('horizontal outros fade within 1.7 seconds and reserve only a music-backed 
   assert.deepEqual(editor.renderOutroTiming('horizontal', true, 1.5), {
     visualFadeSeconds: 1.5, totalSeconds: 1.8, musicTailSeconds: 0.3
   });
+  assert.deepEqual(editor.renderOutroTiming('vertical', false, 0), {
+    visualFadeSeconds: 0, totalSeconds: 0, musicTailSeconds: 0
+  });
 });
 
 test('encoder queue never overlaps two jobs for the same recording', async function () {
