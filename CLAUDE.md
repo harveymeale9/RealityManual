@@ -24378,8 +24378,10 @@ one follow-up; new orders save eligibility unless the buyer opts out. Old
 checkout clients still send the original `review_request_opt_in` boolean, whose
 meaning is retained; missing preferences default off. Historical orders that
 left the previous unchecked opt-in empty are not silently reclassified. The
-separate abandoned-checkout recovery opt-in remains unchanged. Privacy copy
-matches the new choice.
+separate abandoned-checkout recovery opt-in was also removed from the page
+at Harvey's explicit “no opt-in at checkout” direction; no new browser
+session can enroll in it. Previously enrolled recovery addresses keep their
+existing single-email handling. Privacy copy matches both changes.
 
 Production audit revealed why the previous follow-up never fired: all 73
 accepted BookVault orders remained locally `BOOKVAULT_ACCEPTED` even though
