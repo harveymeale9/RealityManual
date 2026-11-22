@@ -15,8 +15,7 @@ function voucherEmail(name, code, preview = false) {
   const subject = preview ? '[PREVIEW] Your 50% thank-you voucher' : 'Your 50% thank-you voucher from Harvey';
   const intro = preview ? '<p style="color:#a68143">Preview only — the sample code below is not redeemable.</p>' : '';
   const safeCode = escapeHtml(code);
-  const link = preview ? 'https://realitymanual.com/checkout.html' :
-    'https://realitymanual.com/checkout.html?voucher=' + encodeURIComponent(code);
+  const link = 'https://realitymanual.com/checkout.html';
   const htmlBody = '<!doctype html><html><body style="margin:0;background:#11100d;color:#f3ebdc;font-family:Arial,sans-serif">' +
     '<div style="max-width:600px;margin:auto;padding:36px 24px;text-align:center">' +
     '<p style="letter-spacing:.22em;color:#e4bd71;font-size:12px">THE REALITY MANUAL</p>' +
@@ -26,7 +25,7 @@ function voucherEmail(name, code, preview = false) {
     '<div style="border:1px solid #b9904e;border-radius:16px;padding:24px;margin:30px 0;background:#211b12">' +
     '<p style="font-size:13px;color:#d4b47b;letter-spacing:.1em">50% OFF ONE BOOK · NO EXPIRY</p>' +
     '<p style="font:normal 23px Georgia,serif;letter-spacing:.03em;white-space:nowrap">' + safeCode + '</p></div>' +
-    '<p style="line-height:1.7">Use it for another copy for a friend now, or save it for Volume II when it launches. The discount is on one book only; shipping is unchanged. Use the same email address you used for your feedback.</p>' +
+    '<p style="line-height:1.7">Use it for another copy for a friend now, or save it for Volume II when it launches. The discount is on one book only; shipping is unchanged. Enter this code in the Voucher code field at checkout and use the same email address you used for your feedback.</p>' +
     // Gmail's dark-mode rewrite can turn even !important dark HTML text white.
     // Keep the label as dark pixels inside a small hosted image instead.
     '<a href="' + escapeHtml(link) + '" style="display:inline-block;background:#e9be6d;border-radius:10px;text-decoration:none;color:#171109"><img src="https://realitymanual.com/img/email/voucher-shop-button.png" width="220" height="56" alt="SHOP THE BOOK" style="display:block;width:220px;height:56px;border:0;color:#171109" /></a>' +
@@ -34,7 +33,7 @@ function voucherEmail(name, code, preview = false) {
   const textBody = (preview ? 'PREVIEW ONLY — sample code is not redeemable.\n\n' : '') +
     `Hi ${name},\n\nThank you for taking the time to share such thoughtful feedback. Here is your 50% off voucher for one book: ${code}\n\n` +
     'It never expires. Use it for a copy for a friend now, or save it for Volume II when it launches. ' +
-    'The discount is on one book only; shipping is unchanged. Use the same email address you used for your feedback.\n\n' +
+    'The discount is on one book only; shipping is unchanged. Enter the code in the Voucher code field at checkout and use the same email address you used for your feedback.\n\n' +
     link + '\n\nWith gratitude,\nHarvey';
   return { subject, textBody, htmlBody };
 }

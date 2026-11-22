@@ -24560,3 +24560,12 @@ generically. The visible input is therefore restored as “Voucher code
 (optional)” with an “Enter voucher code” placeholder. Email-link prefill and
 the server-authoritative voucher check remain as before. The discount row
 still stays hidden until a valid server quote returns a nonzero discount.
+
+Harvey then clarified that even a voucher email link must not auto-apply the
+discount. Checkout no longer reads `?voucher=` into the input. Existing
+emails with that parameter now open checkout with an empty code field; the
+buyer has to type the code. New voucher emails link to plain checkout and
+explicitly instruct the buyer to enter the code in the visible field using
+the email address from their feedback. Server validation and the one-book,
+shipping-excluded discount remain unchanged. A screenshot/browser check
+should verify URL parameters cannot silently populate the field.

@@ -9,8 +9,6 @@
   const postalInput = document.getElementById('postal_code');
   const quantityInput = document.getElementById('quantity');
   const voucherInput = document.getElementById('voucher_code');
-  const voucherFromLink = new URLSearchParams(window.location.search).get('voucher');
-  if (voucherFromLink && /^RM50-(?:[0-9A-V]{11}|[A-Z0-9]{8}-[A-Z0-9]{8})$/i.test(voucherFromLink)) voucherInput.value = voucherFromLink.toUpperCase();
   const voucherDiscountRow = document.getElementById('voucher-discount-row');
   const summaryVoucherDiscount = document.getElementById('summary-voucher-discount');
   const qtyDecreaseButton = document.getElementById('qty-decrease');

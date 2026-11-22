@@ -27,6 +27,8 @@ test('constructive feedback receives one no-expiry voucher; review and generic p
   assert.match(issued[0][1], /^RM50-[0-9A-V]{11}$/);
   assert.match(sent[0].htmlBody, /50% OFF ONE BOOK · NO EXPIRY/);
   assert.match(sent[0].textBody, /shipping is unchanged/i);
+  assert.match(sent[0].textBody, /Enter the code in the Voucher code field/);
+  assert.doesNotMatch(sent[0].htmlBody, /checkout\.html\?voucher=/);
   assert.equal(JSON.parse(db.prepare('SELECT data FROM customer_submissions WHERE id=?').get(records[0].id).data).voucherReview.status, 'sent');
   assert.equal(JSON.parse(db.prepare('SELECT data FROM customer_submissions WHERE id=?').get(records[1].id).data).voucherReview.status, 'not_constructive');
   assert.equal(JSON.parse(db.prepare('SELECT data FROM customer_submissions WHERE id=?').get(records[2].id).data).voucherReview, undefined);
