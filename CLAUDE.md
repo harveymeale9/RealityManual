@@ -24611,3 +24611,24 @@ if the thread is later moved back into Inbox. Existing archived forms are
 reconciled on the next badge poll; the reader-messages page also reflects
 them as handled. The Mailbox UI asks for an immediate badge refresh after a
 successful archive or send instead of waiting for its 30-second poll.
+
+## False Kanban stale-card warnings (2026-11-22)
+
+Harvey reported frequent “card changed on another device” warnings without
+another person editing. The browser was sending whole-card PUTs even when an
+open card was merely closed, and every background server write rotated the
+optimistic-concurrency token. A legitimate edit to a different field was
+also rejected as if it collided with that worker write. The shared store now
+retains a non-serialized baseline for each fetched piece. It skips untouched
+card writes and, after a 409, retries a bounded merge of fields the user
+actually changed onto the latest server record. If both sides changed the
+same field differently, it still rejects and shows the warning; it never
+silently overwrites that real competing edit. Successful saves advance the
+baseline without discarding text typed while the request was in flight.
+
+Targeted tests cover the no-op, safe merge, and true conflict paths. A real
+Chromium check used a temporary planning card: an intervening server update
+and a browser title edit both persisted without a conflict toast. The test
+card was removed through the normal API afterward. The complete ops-service
+suite passed (405 tests). The old test that pinned the previous store.js
+cache-buster was updated to check its versioned form instead.

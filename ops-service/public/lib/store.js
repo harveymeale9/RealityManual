@@ -7,6 +7,40 @@ window.RMStore = (function () {
   var FILE_STORES = ['videos', 'audioTracks'];
   var pieceWriteQueues = {};
 
+  function rememberPieceBase(record, saved) {
+    if (!record || !saved) return record;
+    Object.defineProperty(record, '_pieceBase', {
+      value: JSON.parse(JSON.stringify(saved)), writable: true, configurable: true
+    });
+    return record;
+  }
+
+  function sameValue(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+  function pieceChanges(base, body) {
+    if (!base) return null;
+    var changes = [];
+    Object.keys(Object.assign({}, base, body)).forEach(function (key) {
+      if (key !== 'id' && key !== '_recordVersion' && key !== 'updatedAt' &&
+          !sameValue(base[key], body[key])) changes.push(key);
+    });
+    return changes;
+  }
+
+  function mergeNonOverlappingPiece(base, body, latest, changes) {
+    if (!base || !latest || !latest._recordVersion || !changes) return null;
+    var merged = Object.assign({}, latest);
+    for (var i = 0; i < changes.length; i++) {
+      var key = changes[i];
+      // A genuine same-field edit from another tab/device must still stop.
+      if (!sameValue(latest[key], base[key]) && !sameValue(latest[key], body[key])) return null;
+      if (Object.prototype.hasOwnProperty.call(body, key)) merged[key] = body[key];
+      else delete merged[key];
+    }
+    if (changes.length) merged.updatedAt = body.updatedAt || new Date().toISOString();
+    return merged;
+  }
+
   function apiFetch(path, opts) {
     opts = opts || {};
     opts.credentials = 'include';
@@ -26,6 +60,7 @@ window.RMStore = (function () {
     return apiFetch('/api/store/' + storeName)
       .then(function (r) { return r.ok ? r.json() : []; })
       .then(function (records) {
+        if (storeName === 'pieces') records.forEach(function (record) { rememberPieceBase(record, record); });
         if (FILE_STORES.indexOf(storeName) === -1) return records;
         return Promise.all(records.map(function (rec) { return attachBlob(storeName, rec); }));
       })
@@ -45,6 +80,7 @@ window.RMStore = (function () {
     return apiFetch('/api/store/' + storeName + '/' + encodeURIComponent(id))
       .then(function (r) { return r.ok ? r.json() : undefined; })
       .then(function (record) {
+        if (record && storeName === 'pieces') rememberPieceBase(record, record);
         if (!record || FILE_STORES.indexOf(storeName) === -1) return record;
         return attachBlob(storeName, record);
       })
@@ -74,23 +110,42 @@ window.RMStore = (function () {
     }
     var body = {};
     Object.keys(record).forEach(function (k) { if (k !== 'blob') body[k] = record[k]; });
-    return apiFetch('/api/store/' + storeName + '/' + encodeURIComponent(record.id), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    }).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (data) {
-        if (r.status === 409) {
-          signalConflict(storeName, record.id, data);
-          var conflict = new Error(data.message || 'A newer version exists.');
-          conflict.code = 'stale_write';
-          throw conflict;
-        }
-        if (!r.ok) throw new Error(data.error || 'Could not save.');
-        if (storeName === 'pieces' && data && data._recordVersion) record._recordVersion = data._recordVersion;
-        return data;
+    var base = storeName === 'pieces' ? record._pieceBase : null;
+    var changes = storeName === 'pieces' ? pieceChanges(base, body) : null;
+    // Closing an untouched card previously issued a full-record PUT, which
+    // could warn about an unrelated worker update despite no user edit.
+    if (changes && !changes.length) return Promise.resolve(base);
+    function write(candidate, retryCount) {
+      return apiFetch('/api/store/' + storeName + '/' + encodeURIComponent(record.id), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(candidate)
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (data) {
+          if (r.status === 409 && data.error === 'stale_write' && retryCount < 2) {
+            var merged = mergeNonOverlappingPiece(base, body, data.latest, changes);
+            if (merged) return write(merged, retryCount + 1);
+          }
+          if (r.status === 409) {
+            signalConflict(storeName, record.id, data);
+            var conflict = new Error(data.message || 'A newer version exists.');
+            conflict.code = 'stale_write';
+            throw conflict;
+          }
+          if (!r.ok) throw new Error(data.error || 'Could not save.');
+          if (storeName === 'pieces' && data && data._recordVersion) {
+            // The user may have typed again during this request. Keep those
+            // newer in-memory edits while advancing the acknowledged base.
+            Object.keys(data).forEach(function (key) {
+              if (key === '_recordVersion' || sameValue(record[key], body[key])) record[key] = data[key];
+            });
+            rememberPieceBase(record, data);
+          }
+          return data;
+        });
       });
-    });
+    }
+    return write(body, 0);
   }
 
   function put(storeName, record) {
