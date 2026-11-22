@@ -24442,5 +24442,7 @@ The production Worker was deployed as version
 `5fb6617d-401d-46c3-9d2b-15246143a1b8` after 59/59 backend and 34/34
 Worker tests passed. Checkout JavaScript passed syntax checking. The live API
 health returned checkout enabled; D1 showed 17 shipped orders and zero
-post-delivery messages sent, consistent with the current due dates. Frontend
-deployment still requires the public-page check after push.
+post-delivery messages sent, consistent with the current due dates. After the
+push, the public checkout served the new JavaScript, showed the email-field
+notice, and contained no review preference field; both the live Worker and
+the paused VPS fallback returned healthy responses.
