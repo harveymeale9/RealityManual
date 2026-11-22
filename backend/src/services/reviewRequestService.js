@@ -7,6 +7,14 @@ const { reviewRequestDueAt } = require('./reviewSchedule');
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 let processing = false;
 
+function hasReviewEmailBasis(order, now) {
+  if (order.country === 'US' || order.review_request_opt_in) return true;
+  if (order.country !== 'CA') return false;
+  const cutoff = new Date(now);
+  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 2);
+  return Date.parse(order.created_at) >= cutoff.getTime();
+}
+
 async function processReviewRequest(order, now = new Date()) {
   const dueAt = reviewRequestDueAt(order);
   if (!dueAt || new Date(dueAt) > now) return false;
@@ -23,7 +31,7 @@ async function processReviewRequest(order, now = new Date()) {
   const latest = orderService.getById(order.id);
   if (!latest || latest.stripe_livemode !== 1 || latest.order_status !== 'SHIPPED' ||
       !latest.bookvault_order_id || !(latest.bookvault_dispatched_at || latest.shipping_email_sent_at) || latest.refund_email_sent_at ||
-      !(latest.country === 'US' || latest.review_request_opt_in) || latest.review_request_opt_out_at ||
+      !hasReviewEmailBasis(latest, now) || latest.review_request_opt_out_at ||
       latest.review_request_email_sent_at || latest.review_request_skipped_at) return false;
 
   if (!String(process.env.MARKETING_POSTAL_ADDRESS || '').trim()) return false;

@@ -76,10 +76,11 @@ test('new checkout opt-out controls follow-up eligibility without changing legac
   assert.equal(orderService.createOrder({ ...base, email: 'legacy@example.test', review_request_opt_in: false }).review_request_opt_in, 0);
 });
 
-test('US buyers and previously opted-in international buyers receive one due email', async () => {
+test('US and recent Canadian buyers, plus previously opted-in international buyers, receive one due email', async () => {
   const eligible = shippedOrder('eligible@example.com', true);
   const noConsent = shippedOrder('no-consent@example.com', false, 'GB');
   const usWithoutOldOptIn = shippedOrder('us-without-old-optin@example.com', false);
+  const canadianBuyer = shippedOrder('canadian-buyer@example.com', false, 'CA');
   const sent = [];
   resendClient.getContactByEmail = async () => ({ unsubscribed: false });
   resendClient.sendEmail = async message => { sent.push(message); return { id: `email_${sent.length}` }; };
@@ -87,15 +88,16 @@ test('US buyers and previously opted-in international buyers receive one due ema
   await reviewService.processDueReviewRequests(new Date());
   assert.equal(sent.length, 0);
   await reviewService.processDueReviewRequests(new Date(Date.now() + 22 * 86400000));
-  assert.equal(sent.length, 2);
+  assert.equal(sent.length, 3);
   assert.equal(sent[0].to, eligible.email);
   assert.equal(sent[0].idempotencyKey, `${eligible.id}-review-request`);
   assert.equal(sent[0].headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
   assert.ok(orderService.getById(eligible.id).review_request_email_sent_at);
   assert.ok(orderService.getById(usWithoutOldOptIn.id).review_request_email_sent_at);
+  assert.ok(orderService.getById(canadianBuyer.id).review_request_email_sent_at);
   assert.equal(orderService.getById(noConsent.id).review_request_email_sent_at, null);
   await reviewService.processDueReviewRequests(new Date(Date.now() + 23 * 86400000));
-  assert.equal(sent.length, 2);
+  assert.equal(sent.length, 3);
 });
 
 test('unsubscribed Resend contacts and refunded orders never receive review mail', async () => {

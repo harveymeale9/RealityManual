@@ -24446,3 +24446,20 @@ post-delivery messages sent, consistent with the current due dates. After the
 push, the public checkout served the new JavaScript, showed the email-field
 notice, and contained no review preference field; both the live Worker and
 the paused VPS fallback returned healthy responses.
+
+Harvey reiterated that the follow-up should reach all buyers worldwide. A
+second jurisdiction check found Canadian purchasers can receive the message
+under CASL's two-year existing-business-relationship implied consent, with
+the existing identification and unsubscribe mechanism. The Worker and VPS
+fallback now include Canadian purchases less than two years old without the
+old opt-in checkbox. The UK requires consent or a soft opt-in that included
+an opt-out when the address was collected; Australia's regulator explicitly
+says a one-off purchase alone does not create inferred consent. The approved
+email promotes the /iloveyou page's voucher and paid reviews, so it is not a
+pure order-service notice. Thus remaining non-US/CA destinations still require
+recorded opt-in. The Canadian case is covered by the backend due-send test.
+This change is code only: this session has no authenticated Cloudflare deploy
+credential (`wrangler whoami` is unauthenticated), so the production Worker
+and public privacy notice still reflect the previous US/opt-in policy until
+the Worker can be deployed. The paused VPS fallback is likewise not rebuilt
+for this unshipped change.
