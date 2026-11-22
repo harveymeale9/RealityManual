@@ -291,7 +291,8 @@ test('sales timing chart shows hourly views, books sold, upload markers and all 
   ] });
   assert.match(partialGapHtml, /class="sales-timing-hour views-estimated"/);
   assert.doesNotMatch(partialGapHtml, /class="sales-timing-hour views-missing"/);
-  assert.match(partialGapHtml, /<polyline points="7\.5,\d+ 22\.5,\d+ 37\.5,\d+"\/>/);
+  assert.match(partialGapHtml, /No poll; chart interpolates ~15\/hour between neighboring readings/);
+  assert.match(partialGapHtml, /<polyline points="7\.5,118 22\.5,66 37\.5,14"\/>/);
   const longGapHtml = render({ days: 3, totals: { measured_views: 30, orders: 0, us_orders: 0 }, hourly: [
     { at: '2026-11-13T10:00:00.000Z', views: 10, orders: 0, view_coverage: 'complete', uploads: [] },
     { at: '2026-11-13T11:00:00.000Z', views: null, orders: 0, view_coverage: 'missing', uploads: [] },

@@ -578,9 +578,9 @@
     var plotViews = bins.map(function (bin) { return bin.views == null ? null : Number(bin.views) || 0; });
     var smoothedHours = {};
     // A missed hourly poll is included in the next observed counter increase.
-    // Spread only one- or two-hour gaps over their covered hours for the line.
-    // A partial next poll still contains a measured counter gain; requiring
-    // complete coverage leaves routine one-hour holes in the visible line.
+    // Spread short gaps covered by a complete next poll over those hours.
+    // When the next poll is only partial, bridge visually between the two
+    // measured points instead of dividing that incomplete gain (a false dip).
     // Keep the raw bins and headline total as measured data.
     for (var gapStart = 1; gapStart < bins.length; gapStart++) {
       if (plotViews[gapStart] != null || plotViews[gapStart - 1] == null) continue;
@@ -589,6 +589,14 @@
       var missed = next - gapStart;
       if (missed > 2 || next === bins.length) continue;
       var observed = Number(bins[next].views) || 0;
+      if (bins[next].view_coverage !== 'complete') {
+        var previous = plotViews[gapStart - 1];
+        for (var bridge = gapStart; bridge < next; bridge++) {
+          plotViews[bridge] = previous + (observed - previous) * (bridge - gapStart + 1) / (missed + 1);
+          smoothedHours[bridge] = { interpolated: true };
+        }
+        continue;
+      }
       for (var fill = gapStart; fill <= next; fill++) {
         plotViews[fill] = observed / (missed + 1);
         smoothedHours[fill] = { observed: observed, hours: missed + 1, missed: fill !== next };
@@ -628,7 +636,8 @@
       var tick = bkkHour === 0 ? date.toLocaleDateString('en-GB', { timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short' }) : bkkHour === 12 ? '12h' : '';
       var uploads = Array.isArray(bin.uploads) ? bin.uploads : [];
       var smoothed = smoothedHours[index];
-      var viewDetail = smoothed ? (smoothed.missed ?
+      var viewDetail = smoothed && smoothed.interpolated ?
+        'No poll; chart interpolates ~' + Math.round(plotViews[index]).toLocaleString() + '/hour between neighboring readings' : smoothed ? (smoothed.missed ?
         'No poll; chart estimates ~' + Math.round(plotViews[index]).toLocaleString() + '/hour from the next ' + smoothed.hours + '-hour gain' :
         smoothed.observed.toLocaleString() + ' views measured across ' + smoothed.hours + ' hours; chart estimates ~' + Math.round(plotViews[index]).toLocaleString() + '/hour') :
         (bin.views == null ? 'YouTube views not measured' : Number(bin.views).toLocaleString() + ' measured long-form views' + (bin.view_coverage === 'partial' ? ' (partial)' : ''));

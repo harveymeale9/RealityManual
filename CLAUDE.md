@@ -23819,12 +23819,13 @@ long-gap preservation; a browser preview was checked against the live data.
 
 Follow-up (2026-11-22): a recurring one-hour hatch still appeared when the
 next successful YouTube snapshot had partial per-video coverage. The chart's
-short-gap smoothing unnecessarily required `view_coverage === 'complete'`,
-even though that next hour contained a measured counter gain. It now spreads
-the next observed gain across a one- or two-hour missed interval regardless
-of complete/partial coverage, marks those displayed hours as estimates, and
-leaves raw API bins and the measured total untouched. Longer or unbounded
-gaps remain unknown. A partial-coverage regression test covers the case.
+short-gap smoothing unnecessarily required `view_coverage === 'complete'`.
+For a one- or two-hour gap followed by a partial snapshot, it now interpolates
+the missing point between neighboring measured points and labels it as a
+display estimate. Dividing the incomplete next gain across both hours made an
+artificial deep dip in the line, so the partial next reading is kept at its
+measured value. Raw API bins and headline totals remain untouched; longer or
+unbounded gaps remain unknown. A partial-coverage regression test covers it.
 
 ## Hourly sales bars meet the day-summary baseline (2026-11-20)
 
