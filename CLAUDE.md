@@ -24534,3 +24534,23 @@ preview and image at commit `9e3f1b3`; the live PNG returned HTTP 200 with
 the same SHA-256 as the repository asset. The production Cloudflare Worker
 was redeployed as version `55655ca7-453c-4694-94a0-403c89e281f7`, and
 its production health endpoint remained healthy with checkout enabled.
+
+## Checkout discount-row visibility and voucher entry (2026-11-22)
+
+Harvey reported that checkout appeared to grant every shopper 50% off.
+The cause was presentation only: the summary discount row had a `hidden`
+attribute, but `.summary-row { display:flex }` overrode the browser's
+`[hidden]` styling. Its placeholder also said `−$32.50` before any quote.
+The production shipping quote with no voucher returned
+`voucher_discount_cents:0`, and a read-only D1 audit found zero discounted
+orders among 90 total, confirming no automatic discount was charged.
+
+Checkout now explicitly makes `.summary-row[hidden]` use `display:none` and
+starts with an empty discount amount. The visible feedback-voucher field is
+removed at Harvey's request; a hidden input still accepts only a code from
+the recipient's emailed `?voucher=` link, and the Worker remains the
+authority for matching its issued code to the buyer's email and discounting
+only one book, never shipping. The discount row appears only after a valid
+server quote. Browser checks at mobile width confirmed no field or discount
+row without a quote, and confirmed an emailed-link code still preloads in
+the hidden input. No voucher issuance or redemption rules were changed.

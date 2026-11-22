@@ -1574,6 +1574,10 @@ footer a:hover { color: var(--ink-soft); }
   padding: 0.4rem 0;
 }
 
+.summary-row[hidden] {
+  display: none;
+}
+
 .shipping-origin-note {
   margin: 0.15rem 0 0.65rem;
   color: var(--ink-soft);
