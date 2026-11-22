@@ -24569,3 +24569,22 @@ explicitly instruct the buyer to enter the code in the visible field using
 the email address from their feedback. Server validation and the one-book,
 shipping-excluded discount remain unchanged. A screenshot/browser check
 should verify URL parameters cannot silently populate the field.
+
+## Reader-form badges follow Mailbox handling (2026-11-22)
+
+The F/R/VR Mailbox badges originally counted `customer_submissions` rows
+whose `seenAt` was empty. They did not consider the corresponding synthetic
+Mailbox message, whose stable provider ID is `reader-form:<submission id>`.
+Consequently archived or answered feedback/review conversations could leave
+stale badges. A read-only audit found all three current reader-form threads
+already archived while the badges still showed F 1, R 1, VR 1.
+
+The admin summary/list now reconcile each unseen form with its exact Mailbox
+thread. Archiving or trashing that thread, or successfully sending an outbound
+reply in it, stamps `seenAt` and clears only that form's badge. Merely opening
+or marking a Mailbox message read does not clear the form badge; a draft or
+failed send does not count as a reply. The stamp keeps the badge cleared even
+if the thread is later moved back into Inbox. Existing archived forms are
+reconciled on the next badge poll; the reader-messages page also reflects
+them as handled. The Mailbox UI asks for an immediate badge refresh after a
+successful archive or send instead of waiting for its 30-second poll.

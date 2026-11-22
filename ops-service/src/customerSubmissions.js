@@ -73,6 +73,28 @@ function setup(db, options) {
   const publicRouter = express.Router();
   const adminRouter = express.Router();
 
+  // A reader form also creates one Mailbox message with this exact provider ID.
+  // Keep the reader badge in step with Harvey handling that conversation.
+  function reconcileHandledForms() {
+    const hasMailbox = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name IN ('mailbox_threads','mailbox_messages')").all().length === 2;
+    if (!hasMailbox) return;
+    const handled = db.prepare(`SELECT 1 FROM mailbox_messages AS source
+      JOIN mailbox_threads AS thread ON thread.id=source.thread_id
+      WHERE source.provider_id=? AND (
+        thread.folder IN ('archive','trash') OR EXISTS (
+          SELECT 1 FROM mailbox_messages AS reply
+          WHERE reply.thread_id=thread.id AND reply.direction='outbound' AND reply.status='sent'
+        )
+      ) LIMIT 1`);
+    const stamp = new Date().toISOString();
+    for (const row of allComplete.all()) {
+      const data = parse(row);
+      if (data.seenAt || !handled.get('reader-form:' + data.id)) continue;
+      data.seenAt = stamp;
+      save.run(JSON.stringify(data), data.status, data.submittedAt || null, data.id);
+    }
+  }
+
   function originAllowed(req, res, next) {
     if (!allowedOrigins.includes(req.get('origin'))) return res.status(403).json({ error: 'origin_not_allowed' });
     if (!client) return res.status(503).json({ error: 'upload_unavailable' });
@@ -178,6 +200,7 @@ function setup(db, options) {
     Promise.resolve(sendNotice(data)).catch(error => console.error('Customer submission notice failed:', error.message));
   });
   adminRouter.get('/', function (req, res) {
+    reconcileHandledForms();
     res.json({ submissions: list.all().map(row => { const data = parse(row); return {
       id: data.id, kind: data.kind, name: data.name, email: data.email, message: data.message,
       paidVideo: data.paidVideo, consent: data.consent, consentVersion: data.consentVersion,
@@ -187,6 +210,7 @@ function setup(db, options) {
     }; }) });
   });
   adminRouter.get('/summary', function (req, res) {
+    reconcileHandledForms();
     const counts = { F: 0, R: 0, VR: 0 };
     for (const row of allComplete.all()) {
       const data = parse(row);

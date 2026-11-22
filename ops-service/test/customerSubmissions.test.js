@@ -4,11 +4,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
 const Database = require('better-sqlite3');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const {
   CreateMultipartUploadCommand, CompleteMultipartUploadCommand,
   HeadObjectCommand, GetObjectCommand
 } = require('@aws-sdk/client-s3');
 const service = require('../src/customerSubmissions');
+const mailboxService = require('../src/mailboxService');
 
 test('reader submission validates review consent, paid video, and 3 GiB ceiling', function () {
   const base = { kind: 'review', name: 'Reader', email: 'reader@example.com', message: 'Honest thoughts', consent: true, files: [] };
@@ -75,4 +79,47 @@ test('public multipart flow stores a private submission and admin can open its m
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(notices, [id]);
   } finally { await new Promise(resolve => server.close(resolve)); db.close(); }
+});
+
+test('reader badges clear after the matching Mailbox conversation is archived or answered', async function (t) {
+  const db = new Database(':memory:');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-reader-badge-'));
+  const mailbox = mailboxService.setup(db, { dataDir: dir, autoSync: false,
+    transport: { name: 'Test mail', send: async () => ({ id: 'sent-reply' }) } });
+  const reader = service.setup(db, { cleanup: false });
+  const app = express(); app.use(express.json());
+  app.use('/mail', mailbox.router); app.use('/reader', reader.adminRouter);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(async () => { await new Promise(resolve => server.close(resolve)); mailbox.close(); db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const records = [
+    { id: '11111111-1111-4111-8111-111111111111', kind: 'feedback', files: [] },
+    { id: '22222222-2222-4222-8222-222222222222', kind: 'review', files: [] },
+    { id: '33333333-3333-4333-8333-333333333333', kind: 'review', files: [{ kind: 'video' }] }
+  ];
+  const insert = db.prepare('INSERT INTO customer_submissions(id,data,token_hash,ip_hash,status,created_at,submitted_at) VALUES(?,?,?,?,?,?,?)');
+  const threads = records.map(record => {
+    insert.run(record.id, JSON.stringify({ ...record, name: 'Reader', email: 'reader@example.test', message: 'Book thoughts',
+      status: 'complete', submittedAt: '2026-11-22T10:00:00.000Z' }), 'token', 'ip', 'complete', '2026-11-22T10:00:00.000Z', '2026-11-22T10:00:00.000Z');
+    return mailbox.ingest({ providerId: 'reader-form:' + record.id, fromEmail: 'reader@example.test',
+      subject: 'Reader submission', textBody: 'Book thoughts' }).threadId;
+  });
+  async function counts() { return (await (await fetch(base + '/reader/summary')).json()).counts; }
+  assert.deepEqual(await counts(), { F: 1, R: 1, VR: 1 });
+  await fetch(base + '/mail/threads/' + threads[1]); // Reading alone must not clear a form badge.
+  assert.deepEqual(await counts(), { F: 1, R: 1, VR: 1 });
+  const archived = await fetch(base + '/mail/threads/' + threads[0], { method: 'PATCH',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ folder: 'archive' }) });
+  assert.equal(archived.status, 200);
+  assert.deepEqual(await counts(), { F: 0, R: 1, VR: 1 });
+  await fetch(base + '/mail/threads/' + threads[0], { method: 'PATCH',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ folder: 'inbox' }) });
+  assert.deepEqual(await counts(), { F: 0, R: 1, VR: 1 }, 'a handled form stays cleared if the thread is moved back');
+  await mailbox.sendAutomated({ threadId: threads[1], to: ['reader@example.test'], subject: 'Re: Reader submission', textBody: 'Thank you' });
+  assert.deepEqual(await counts(), { F: 0, R: 0, VR: 1 });
+  const listed = await (await fetch(base + '/reader/')).json();
+  assert.equal(listed.submissions.filter(item => item.seenAt).length, 2);
+  assert.equal((await fetch(base + '/reader/' + records[2].id + '/seen', { method: 'POST' })).status, 200);
+  assert.deepEqual(await counts(), { F: 0, R: 0, VR: 0 });
 });

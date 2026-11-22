@@ -171,6 +171,7 @@
   }
   function patchThread(body) {
     api('/threads/' + encodeURIComponent(state.selected), { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(function () {
+      if (body.folder === 'archive' || body.folder === 'trash') window.dispatchEvent(new Event('rm-reader-form-handled'));
       if (body.folder) { state.selected = null; state.detail = null; root.querySelector('#mailReading').innerHTML = '<div class="mail-reading-empty"><span>✉</span><strong>Conversation archived</strong></div>'; }
       else return openThread(state.selected);
       return loadThreads();
@@ -251,6 +252,7 @@
       state.draftId = draft && draft.id;
       state.files = []; renderFiles();
       status.textContent = send ? 'Sent' : 'Draft saved';
+      if (send) window.dispatchEvent(new Event('rm-reader-form-handled'));
       refreshStatus().then(renderConnection);
       loadThreads();
       if (send) setTimeout(closeComposer, 450);

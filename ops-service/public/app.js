@@ -1619,6 +1619,7 @@
     bindSideRail();
     window.RMMailbox.startBadgePolling();
     startReaderFormBadgePolling();
+    window.addEventListener('rm-reader-form-handled', refreshReaderFormBadge);
     startEditorUnreadBadgePolling();
     bootModal();
     window.addEventListener('hashchange', renderActiveTab);
