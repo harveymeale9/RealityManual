@@ -12,6 +12,7 @@
     "BOOKVAULT_TITLE_ISBN": "9658364000016",
     "RESEND_FROM_EMAIL": "The Reality Manual <orders@realitymanual.com>",
     "RESEND_REPLY_TO": "info@realitymanual.com",
+    "MARKETING_POSTAL_ADDRESS": "2810 N Church St STE 88840, Wilmington, DE 19802",
     "DEPLOYMENT_STAGE": "production",
     "CHECKOUT_ENABLED": "true",
     "FULFILLMENT_ENABLED": "true",

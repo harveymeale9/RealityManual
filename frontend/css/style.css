@@ -1709,6 +1709,7 @@ footer a:hover { color: var(--ink-soft); }
 }
 
 .field { margin-bottom: 1.1rem; }
+.field-hint { margin: 0.45rem 0 0; color: var(--ink-soft); font-size: 0.75rem; line-height: 1.45; }
 
 .field label {
   display: block;

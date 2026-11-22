@@ -74,15 +74,18 @@ test('checkout saves one D1 order and returns the existing browser contract', as
   sqlite.close();
 });
 
-test('new checkout defaults to one follow-up, but explicit opt-out and legacy no-consent stay off', async () => {
+test('new checkout asks no preference, while cached explicit opt-out remains recorded', async () => {
   const { sqlite, db } = fixture();
   const { createOrder } = await import('../src/orderStore.js');
   const allowed = await createOrder(db, { ...body, review_request_opt_in: undefined, review_request_opt_out: false }, totals, null);
   const declined = await createOrder(db, { ...body, review_request_opt_in: undefined, review_request_opt_out: true }, totals, null);
   const legacy = await createOrder(db, { ...body, review_request_opt_in: false, review_request_opt_out: undefined }, totals, null);
+  const noPreference = await createOrder(db, { ...body, review_request_opt_in: undefined, review_request_opt_out: undefined }, totals, null);
   assert.equal(allowed.review_request_opt_in, 1);
   assert.equal(declined.review_request_opt_in, 0);
+  assert.ok(declined.review_request_opt_out_at);
   assert.equal(legacy.review_request_opt_in, 0);
+  assert.equal(noPreference.review_request_opt_in, 0);
   sqlite.close();
 });
 

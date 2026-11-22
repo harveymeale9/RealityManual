@@ -9,12 +9,12 @@ const insertOrderStmt = db.prepare(`
     id, customer_name, email, phone, country, street1, street2, city, state, postal_code, quantity,
     book_price_cents, shipping_price_cents, shipping_service_name, shipping_service_id, shipping_min_delivery_days,
     shipping_max_delivery_days, total_price_cents, currency, review_request_opt_in,
-    review_request_opt_in_at, attribution_json, order_status
+    review_request_opt_in_at, review_request_opt_out_at, attribution_json, order_status
   ) VALUES (
     @id, @customer_name, @email, @phone, @country, @street1, @street2, @city, @state, @postal_code, @quantity,
     @book_price_cents, @shipping_price_cents, @shipping_service_name, @shipping_service_id, @shipping_min_delivery_days,
     @shipping_max_delivery_days, @total_price_cents, @currency, @review_request_opt_in,
-    @review_request_opt_in_at, @attribution_json, 'PAYMENT_PENDING'
+    @review_request_opt_in_at, @review_request_opt_out_at, @attribution_json, 'PAYMENT_PENDING'
   )
 `);
 
@@ -75,10 +75,12 @@ const reviewRequestCandidatesStmt = db.prepare(`
     AND bookvault_order_id IS NOT NULL
     AND COALESCE(bookvault_dispatched_at, shipping_email_sent_at) IS NOT NULL
     AND refund_email_sent_at IS NULL
-    AND review_request_opt_in = 1
+    AND (country = 'US' OR review_request_opt_in = 1)
     AND review_request_email_sent_at IS NULL
     AND review_request_skipped_at IS NULL
     AND review_request_opt_out_at IS NULL
+    AND NOT EXISTS (SELECT 1 FROM orders prior WHERE LOWER(prior.email) = LOWER(orders.email)
+      AND prior.review_request_opt_out_at IS NOT NULL)
   ORDER BY COALESCE(bookvault_dispatched_at, shipping_email_sent_at) ASC
   LIMIT ?
 `);
@@ -133,7 +135,7 @@ const markEmailSentStmt = {
 const markReviewRequestSkippedStmt = db.prepare("UPDATE orders SET review_request_skipped_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?");
 const suppressReviewRequestsStmt = db.prepare(`
   UPDATE orders SET review_request_opt_out_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-  WHERE LOWER(email) = LOWER(?) AND review_request_email_sent_at IS NULL
+  WHERE LOWER(email) = LOWER(?)
 `);
 const markResendContactSyncedStmt = db.prepare(`
   UPDATE orders
@@ -176,6 +178,7 @@ function createOrder(input) {
     currency: input.currency,
     review_request_opt_in: (input.review_request_opt_out !== undefined ? input.review_request_opt_out === false : input.review_request_opt_in === true) ? 1 : 0,
     review_request_opt_in_at: (input.review_request_opt_out !== undefined ? input.review_request_opt_out === false : input.review_request_opt_in === true) ? new Date().toISOString() : null,
+    review_request_opt_out_at: input.review_request_opt_out === true ? new Date().toISOString() : null,
     attribution_json: normalizeOrderAttribution(input.attribution),
   });
   return getByIdStmt.get(id);

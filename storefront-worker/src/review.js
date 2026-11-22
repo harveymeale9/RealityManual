@@ -21,7 +21,7 @@ export async function reviewRoute(request, env) {
   const order = await getOrderById(env.DB, orderId);
   if (order) {
     await env.DB.prepare(`UPDATE orders SET review_request_opt_out_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-      WHERE LOWER(email) = LOWER(?) AND review_request_email_sent_at IS NULL`)
+      WHERE LOWER(email) = LOWER(?)`)
       .bind(order.email).run();
   }
   return new Response(page({ complete: true }), { headers });

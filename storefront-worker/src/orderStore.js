@@ -5,8 +5,9 @@ const PAID_STATES = new Set(['PAYMENT_RECEIVED', 'FULFILLMENT_RETRY', 'BOOKVAULT
 
 export async function createOrder(db, body, totals, attributionJson) {
   const id = crypto.randomUUID();
-  // Explicit opt-out is the new checkout contract. Preserve the old opt-in
-  // meaning for cached checkout clients; an absent preference is not consent.
+  // The current checkout asks no marketing-preference question. Preserve
+  // choices submitted by cached earlier clients; US follow-up eligibility is
+  // decided at send time, while other destinations require the old opt-in.
   const reviewEligible = body.review_request_opt_out !== undefined
     ? body.review_request_opt_out === false : body.review_request_opt_in === true;
   await db.prepare(`
@@ -15,8 +16,8 @@ export async function createOrder(db, body, totals, attributionJson) {
       quantity, book_price_cents, shipping_price_cents, shipping_service_name, shipping_service_id,
       shipping_min_delivery_days, shipping_max_delivery_days, total_price_cents, currency,
       voucher_code_hash, voucher_discount_cents,
-      review_request_opt_in, review_request_opt_in_at, attribution_json, order_status
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'PAYMENT_PENDING')
+      review_request_opt_in, review_request_opt_in_at, review_request_opt_out_at, attribution_json, order_status
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'PAYMENT_PENDING')
   `).bind(
     id, body.customer_name.trim(), body.email.trim(), body.phone.trim(), body.country_code.trim().toUpperCase(),
     body.street1.trim(), body.street2?.trim() || null, body.city.trim(), body.state?.trim() || null,
@@ -26,6 +27,7 @@ export async function createOrder(db, body, totals, attributionJson) {
     totals.voucherCodeHash || null, totals.voucherDiscountCents || 0,
     reviewEligible ? 1 : 0,
     reviewEligible ? new Date().toISOString() : null,
+    body.review_request_opt_out === true ? new Date().toISOString() : null,
     attributionJson,
   ).run();
   return getOrderById(db, id);

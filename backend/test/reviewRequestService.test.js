@@ -30,10 +30,10 @@ test('Cloudflare handoff switch stops VPS review-request automation', async () =
   }
 });
 
-function shippedOrder(email, optIn) {
+function shippedOrder(email, optIn, countryCode = 'US') {
   const order = orderService.createOrder({
     customer_name: 'Ava Reader', email, phone: '+12025550123',
-    country_code: 'US', street1: '1 Example Road', street2: '', city: 'Austin',
+    country_code: countryCode, street1: '1 Example Road', street2: '', city: 'Austin',
     state: 'TX', postal_code: '78701', quantity: 1, bookPriceCents: 6500,
     shippingPriceCents: 999, shippingServiceName: 'USPS Consolidator',
     shippingServiceId: 321, shippingMinDeliveryDays: 2, shippingMaxDeliveryDays: 8,
@@ -72,12 +72,14 @@ test('new checkout opt-out controls follow-up eligibility without changing legac
   };
   assert.equal(orderService.createOrder({ ...base, email: 'allowed@example.test', review_request_opt_out: false }).review_request_opt_in, 1);
   assert.equal(orderService.createOrder({ ...base, email: 'declined@example.test', review_request_opt_out: true }).review_request_opt_in, 0);
+  assert.ok(orderService.getById(orderService.createOrder({ ...base, email: 'declined-again@example.test', review_request_opt_out: true }).id).review_request_opt_out_at);
   assert.equal(orderService.createOrder({ ...base, email: 'legacy@example.test', review_request_opt_in: false }).review_request_opt_in, 0);
 });
 
-test('only opted-in shipped paid orders receive one review email after their due date', async () => {
+test('US buyers and previously opted-in international buyers receive one due email', async () => {
   const eligible = shippedOrder('eligible@example.com', true);
-  const noConsent = shippedOrder('no-consent@example.com', false);
+  const noConsent = shippedOrder('no-consent@example.com', false, 'GB');
+  const usWithoutOldOptIn = shippedOrder('us-without-old-optin@example.com', false);
   const sent = [];
   resendClient.getContactByEmail = async () => ({ unsubscribed: false });
   resendClient.sendEmail = async message => { sent.push(message); return { id: `email_${sent.length}` }; };
@@ -85,14 +87,15 @@ test('only opted-in shipped paid orders receive one review email after their due
   await reviewService.processDueReviewRequests(new Date());
   assert.equal(sent.length, 0);
   await reviewService.processDueReviewRequests(new Date(Date.now() + 22 * 86400000));
-  assert.equal(sent.length, 1);
+  assert.equal(sent.length, 2);
   assert.equal(sent[0].to, eligible.email);
   assert.equal(sent[0].idempotencyKey, `${eligible.id}-review-request`);
   assert.equal(sent[0].headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
   assert.ok(orderService.getById(eligible.id).review_request_email_sent_at);
+  assert.ok(orderService.getById(usWithoutOldOptIn.id).review_request_email_sent_at);
   assert.equal(orderService.getById(noConsent.id).review_request_email_sent_at, null);
   await reviewService.processDueReviewRequests(new Date(Date.now() + 23 * 86400000));
-  assert.equal(sent.length, 1);
+  assert.equal(sent.length, 2);
 });
 
 test('unsubscribed Resend contacts and refunded orders never receive review mail', async () => {

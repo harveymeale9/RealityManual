@@ -1,4 +1,3 @@
-
 # The Reality Manual
 
 ## Project Instructions for Claude Code
@@ -24411,3 +24410,37 @@ entries appeared. The updated checkout and JavaScript were verified on the
 public site with the opt-out present and both old opt-in boxes absent. Customer
 review mail remains deliberately gated until a real business mailing address
 is configured.
+
+## Delaware mailing address; no checkout choice; jurisdiction-aware reader follow-up (2026-11-22)
+
+Harvey supplied the business mailing address `2810 N Church St STE 88840,
+Wilmington, DE 19802` and directed removal of every follow-up choice from
+checkout. The page now has no review opt-in or opt-out checkbox and sends no
+preference field; a small email-field notice explains order updates and the
+one post-delivery message where permitted. The address is configured as the
+Worker's `MARKETING_POSTAL_ADDRESS` and appears in both HTML and plain text.
+The approved `Face Reveal!` content, timing (actual BookVault dispatch, slower
+of quote or 14 days, plus seven days), refund exclusion, idempotency and
+Resend unsubscribe checks remain.
+
+Because the store ships internationally, the Delaware business location does
+not make recipient-country marketing requirements disappear. For US purchasers
+the one-time follow-up no longer depends on the old checkout opt-in value;
+for other destinations the worker requires the previously recorded affirmative
+opt-in rather than assuming an unresearched exception. Existing or newly
+requested unsubscribes are never overridden. The email's unsubscribe link and
+one-click header remain despite Harvey asking to remove opt-outs: US CAN-SPAM
+requires an opt-out in commercial mail, including email promoting content on a
+commercial website (FTC compliance guide). UK ICO guidance requires consent or
+an opt-out offered when details were collected *and* in every message; the
+older unchecked-opt-in customers cannot be backfilled under that exception.
+The unsubscribe route now marks every existing order for that address, even if
+the first order's review email was already sent, and the queue excludes later
+orders for any address with a recorded opt-out. Cached prior checkout clients
+that explicitly choose opt-out now save that choice on the new order.
+The production Worker was deployed as version
+`5fb6617d-401d-46c3-9d2b-15246143a1b8` after 59/59 backend and 34/34
+Worker tests passed. Checkout JavaScript passed syntax checking. The live API
+health returned checkout enabled; D1 showed 17 shipped orders and zero
+post-delivery messages sent, consistent with the current due dates. Frontend
+deployment still requires the public-page check after push.
