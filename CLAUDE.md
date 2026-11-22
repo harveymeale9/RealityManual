@@ -24243,6 +24243,11 @@ or merely scheduled videos cannot start the seven-full-day delay. Existing
 links to long-form video cards still work. The explicit relation remains a
 planning-card ID, never a guessed title match.
 
+The full ops-service suite passed (402 tests). CI redeployed `f5e725b`.
+An authenticated 390 px Chromium session on the public ops domain showed
+outline #025 in #289's dropdown, saved that exact relation, and read it back
+from the public API. The live database also confirms #289 points to #025.
+
 ## Mobile Sales Analytics pinch zoom (2026-11-21)
 
 The hourly Sales Analytics plot previously fitted every selected hour into
