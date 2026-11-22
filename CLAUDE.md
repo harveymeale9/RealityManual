@@ -24515,3 +24515,16 @@ first scheduled sweep at 03:00 UTC successfully sent the overdue Thai
 purchaser's one-time follow-up (`review_request_opt_in=0`), proving the
 international audience change is live. D1 recorded a send timestamp and no
 review-request send errors. No synthetic customer order or email was made.
+
+## Face Reveal email button remains dark in Gmail (2026-11-22)
+
+Harvey's Gmail screenshot showed the `CLICK HERE` text painted white on the
+gold button even though the HTML anchor already specified `color:#080706`.
+This is the same email-client recoloring that previously affected the voucher
+button, so another CSS-only color declaration would not be dependable. The
+Face Reveal CTA now links a transparent PNG containing dark text pixels over
+the existing gold table-cell background. The link retains descriptive
+`aria-label` and image `alt` text. The source email and standalone storefront
+preview were updated together, then the Worker-safe generated email module
+was rebuilt. The image contains only the button lettering, so Gmail cannot
+recolor the lettering without changing the image itself.

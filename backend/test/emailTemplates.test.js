@@ -88,6 +88,8 @@ test('review request uses the approved face-reveal email and retains unsubscribe
   assert.equal(preview.subject, '[PREVIEW] Face Reveal!');
   assert.match(preview.html, /A message from the author/);
   assert.match(preview.html, /face-reveal-harvey-smudged\.png/);
+  assert.match(preview.html, /face-reveal-click-here\.png/);
+  assert.match(preview.html, /alt="CLICK HERE ›"/);
   assert.match(preview.html, /I have something important to discuss with you/);
   assert.match(preview.html, /https:\/\/realitymanual\.com\/iloveyou/);
   assert.doesNotMatch(preview.html, />Important Message<|How are you finding The Reality Manual/);
