@@ -23284,6 +23284,12 @@ after “Is the author the same person featured in the videos?” in the homepag
 FAQ. The root page and retained `/home2/` alias remain aligned. Question and
 answer wording is unchanged; this is a static HTML ordering change only.
 
+Follow-up (2026-11-22): Harvey approved replacement FAQ copy clarifying that
+the original manuscript was written and rewritten by the author, while AI was
+used for some diagrams. It presents AI as one visual-making tool and judges
+the finished diagrams by how well they explain the ideas. The exact approved
+wording is kept in sync on the root page and retained `/home2/` alias.
+
 ## Sales dashboard last-14-days cards (2026-11-17)
 
 Sales Analytics now shows a Last 14 days card in both the Books sold row and
