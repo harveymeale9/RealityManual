@@ -24554,3 +24554,9 @@ only one book, never shipping. The discount row appears only after a valid
 server quote. Browser checks at mobile width confirmed no field or discount
 row without a quote, and confirmed an emailed-link code still preloads in
 the hidden input. No voucher issuance or redemption rules were changed.
+
+Harvey clarified that the field itself should remain available, just named
+generically. The visible input is therefore restored as “Voucher code
+(optional)” with an “Enter voucher code” placeholder. Email-link prefill and
+the server-authoritative voucher check remain as before. The discount row
+still stays hidden until a valid server quote returns a nonzero discount.

@@ -98,7 +98,11 @@
             <div class="field-error"></div>
           </div>
 
-          <input type="hidden" id="voucher_code" name="voucher_code" value="" />
+          <div class="field" data-field="voucher_code">
+            <label for="voucher_code">Voucher code (optional)</label>
+            <input type="text" id="voucher_code" name="voucher_code" maxlength="32" autocomplete="off" placeholder="Enter voucher code" />
+            <div class="field-error"></div>
+          </div>
 
           <div id="payment-element"></div>
 
