@@ -24495,3 +24495,23 @@ that purchaser-wide sending is legally cleared worldwide. At this writing,
 the Cloudflare Worker is not yet redeployed because this shell has no
 authenticated Wrangler session or Cloudflare plugin, so production still
 uses the prior US/opt-in policy until deployment is available.
+
+## Reader follow-up production deployment completed (2026-11-22)
+
+The earlier note that Cloudflare could not be deployed was due to checking
+Wrangler without loading the *existing* owner-created token. The credential
+location is documented above in the Cloudflare migration section:
+`/root/.config/realitymanual-cloudflare/deploy.env`. Sourcing that private
+file into the deploy command uses the existing token; no credential was
+created, written, or printed. Wrangler confirmed the target was the live
+`rm-storefront-api-staging` Worker with the `api.realitymanual.com/*` route,
+production D1 binding and production settings. A dry run bundled cleanly.
+
+Deployed Worker version `16211c96-f4f6-4298-a21b-6ead68c1ef5f` at
+2026-11-22 02:59 UTC. The production route returned healthy with checkout
+enabled. A read-only D1 audit found 17 paid, shipped orders across AU, CA,
+GB, NO, TH and US; none had received the follow-up before deployment. The
+first scheduled sweep at 03:00 UTC successfully sent the overdue Thai
+purchaser's one-time follow-up (`review_request_opt_in=0`), proving the
+international audience change is live. D1 recorded a send timestamp and no
+review-request send errors. No synthetic customer order or email was made.
