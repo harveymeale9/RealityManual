@@ -102,7 +102,7 @@ function customerEmailReply(row) {
   // there is no local outbound thread to join against. Match its stable
   // subjects even when a mail client prefixes them with Re:/Fwd:.
   const subject = clean(row.subject, 1000).toLowerCase();
-  return /(?:making your copy of the reality manual|your copy of the reality manual is on its way|how are you finding the reality manual|couldn.t complete your order)/.test(subject);
+  return /(?:making your copy of the reality manual|your copy of the reality manual is on its way|how are you finding the reality manual|couldn.t complete your order|face reveal!)/.test(subject);
 }
 
 function safeCourtesyRecipient(row) {
@@ -271,7 +271,9 @@ function setup(db, options) {
     const category = clean(result.category, 100) || 'Email';
     const summary = clean(result.summary, 2000) || clean(plainBody(row), 600) || 'No readable message body.';
     const actionRequired = customerReply || result.actionRequired === true;
-    const nextStep = customerReply ? 'Review the message in Mailbox; do not reply until Harvey decides how to respond.' :
+    const revealReply = customerReply && /face reveal!/i.test(clean(row.subject, 1000));
+    const nextStep = revealReply ? 'Review this reply in Mailbox. If the customer asks to stop emails, mark their address unsubscribed before any further follow-up; do not reply automatically.' :
+      customerReply ? 'Review the message in Mailbox; do not reply until Harvey decides how to respond.' :
       (clean(result.suggestedNextStep, 1000) || (actionRequired ? 'Open the mailbox and review it.' : 'No action needed right now.'));
     const reason = clean(result.reason, 1000);
     const stamp = new Date().toISOString();

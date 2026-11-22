@@ -3,14 +3,6 @@ import { getContactByEmail } from './resendContacts.js';
 import { reviewRequestEmail, sendEmail, quantityBand } from './mail.js';
 import { reviewRequestDueAt } from './reviewSchedule.js';
 
-function hasReviewEmailBasis(order, now) {
-  if (order.country === 'US' || order.review_request_opt_in) return true;
-  if (order.country !== 'CA') return false;
-  const cutoff = new Date(now);
-  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 2);
-  return Date.parse(order.created_at) >= cutoff.getTime();
-}
-
 export async function processDueReviewRequests(env, now = new Date()) {
   if (env.FULFILLMENT_ENABLED !== 'true') return 0;
   // This is a marketing/review invitation: do not send without the sender's
@@ -19,9 +11,7 @@ export async function processDueReviewRequests(env, now = new Date()) {
   const rows = await env.DB.prepare(`SELECT * FROM orders WHERE stripe_livemode = 1
     AND order_status = 'SHIPPED' AND bookvault_order_id IS NOT NULL
     AND COALESCE(bookvault_dispatched_at, shipping_email_sent_at) IS NOT NULL AND refund_email_sent_at IS NULL
-    AND (orders.country = 'US' OR (orders.country = 'CA'
-      AND julianday(orders.created_at) >= julianday('now', '-2 years'))
-      OR review_request_opt_in = 1) AND review_request_email_sent_at IS NULL
+    AND review_request_email_sent_at IS NULL
     AND review_request_skipped_at IS NULL AND review_request_opt_out_at IS NULL
     AND NOT EXISTS (SELECT 1 FROM orders prior WHERE LOWER(prior.email) = LOWER(orders.email)
       AND prior.review_request_opt_out_at IS NOT NULL)
@@ -40,7 +30,7 @@ export async function processDueReviewRequests(env, now = new Date()) {
       const latest = await getOrderById(env.DB, order.id);
       if (!latest || latest.stripe_livemode !== 1 || latest.order_status !== 'SHIPPED' ||
           !latest.bookvault_order_id || !(latest.bookvault_dispatched_at || latest.shipping_email_sent_at) || latest.refund_email_sent_at ||
-          !hasReviewEmailBasis(latest, now) || latest.review_request_opt_out_at ||
+          latest.review_request_opt_out_at ||
           latest.review_request_email_sent_at || latest.review_request_skipped_at) continue;
       const optedOut = await env.DB.prepare(`SELECT id FROM orders WHERE LOWER(email) = LOWER(?)
         AND review_request_opt_out_at IS NOT NULL LIMIT 1`).bind(latest.email).first();

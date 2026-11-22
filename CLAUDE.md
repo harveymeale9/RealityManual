@@ -24463,3 +24463,31 @@ credential (`wrangler whoami` is unauthenticated), so the production Worker
 and public privacy notice still reflect the previous US/opt-in policy until
 the Worker can be deployed. The paused VPS fallback is likewise not rebuilt
 for this unshipped change.
+
+## Reader follow-up audience expanded to all paid purchasers (2026-11-22)
+
+Harvey explicitly directed that the one-time `Face Reveal!` follow-up be
+eligible for purchasers in every country, without a checkout marketing
+choice. Removed the country and legacy `review_request_opt_in` checks from
+both the live Worker source and paused VPS fallback candidate/recheck logic.
+Eligibility still requires a real paid shipped order, BookVault dispatch,
+the post-estimated-delivery delay, no refund, no previous send, a synced
+Resend contact, and no explicit unsubscribe in either Resend or any order
+for that email address. The email footer and one-click unsubscribe remain.
+Old cached checkout clients that submitted an explicit opt-out are still
+respected. The public privacy notice no longer claims a US-only audience.
+
+Inbound `Re: Face Reveal!` messages are now deterministically surfaced in
+Harvey's Mailbox/Project Manager notifications, with an instruction to
+manually suppress addresses when a reply asks to stop emails; no automatic
+reply is sent. This does not yet automate Resend/Worker suppression from an
+inbound email. Worker, backend, and mail-triage tests cover the expanded
+audience and reply notification.
+
+Compliance caveat: the linked `/iloveyou` page contains a voucher and paid
+review invitation, so the approved email may be treated as direct marketing
+under recipient-country rules despite its face-reveal framing. Do not claim
+that purchaser-wide sending is legally cleared worldwide. At this writing,
+the Cloudflare Worker is not yet redeployed because this shell has no
+authenticated Wrangler session or Cloudflare plugin, so production still
+uses the prior US/opt-in policy until deployment is available.

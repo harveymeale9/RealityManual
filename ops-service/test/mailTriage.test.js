@@ -27,16 +27,19 @@ test('human replies to storefront emails are alerted even when they only offer f
   mailbox.ingest({ providerId: 'review-auto-1', fromEmail: 'reader2@example.com',
     subject: 'Automatic reply: How are you finding The Reality Manual?',
     textBody: 'Out of office until next week.', receivedAt: '2026-11-13T17:01:00Z' });
+  const revealReply = mailbox.ingest({ providerId: 'reveal-optout-1', fromEmail: 'reader3@example.com',
+    subject: 'Re: Face Reveal!', textBody: 'Please stop emailing me.', receivedAt: '2026-11-13T17:02:00Z' });
   const triage = mailTriageService.setup(db, { autoStart: false, courtesyRepliesEnabled: false,
     classify: async function () { return { important: false, category: 'Feedback',
       summary: 'The reader enjoyed chapter 9.', actionRequired: false,
       suggestedNextStep: 'No action needed.', courtesyReplyEligible: true }; } });
   const result = await triage.processPending(5);
   assert.deepEqual({ processed: result.processed, alerted: result.alerted,
-    courtesyRepliesSent: result.courtesyRepliesSent }, { processed: 2, alerted: 1, courtesyRepliesSent: 0 });
+    courtesyRepliesSent: result.courtesyRepliesSent }, { processed: 3, alerted: 2, courtesyRepliesSent: 0 });
+  assert.match(db.prepare('SELECT suggested_next_step FROM mail_triage WHERE message_id=?').get(revealReply.id).suggested_next_step, /mark their address unsubscribed/);
   assert.equal(db.prepare('SELECT important FROM mail_triage WHERE message_id=?').get(feedback.id).important, 1);
-  assert.equal(db.prepare("SELECT count(*) AS n FROM voice_messages WHERE notification_kind='mail_alert'").get().n, 1);
-  assert.match(db.prepare("SELECT reply_text FROM voice_messages WHERE notification_kind='mail_alert'").get().reply_text,
+  assert.equal(db.prepare("SELECT count(*) AS n FROM voice_messages WHERE notification_kind='mail_alert'").get().n, 2);
+  assert.match(db.prepare("SELECT reply_text FROM voice_messages WHERE notification_kind='mail_alert' AND source_ref=?").get(feedback.id).reply_text,
     /do not reply until Harvey decides/i);
   assert.equal(db.prepare("SELECT count(*) AS n FROM mailbox_messages WHERE direction='outbound'").get().n, 0);
   triage.close();

@@ -75,9 +75,6 @@ const reviewRequestCandidatesStmt = db.prepare(`
     AND bookvault_order_id IS NOT NULL
     AND COALESCE(bookvault_dispatched_at, shipping_email_sent_at) IS NOT NULL
     AND refund_email_sent_at IS NULL
-    AND (country = 'US' OR (country = 'CA'
-      AND julianday(created_at) >= julianday('now', '-2 years'))
-      OR review_request_opt_in = 1)
     AND review_request_email_sent_at IS NULL
     AND review_request_skipped_at IS NULL
     AND review_request_opt_out_at IS NULL

@@ -6,8 +6,8 @@ const PAID_STATES = new Set(['PAYMENT_RECEIVED', 'FULFILLMENT_RETRY', 'BOOKVAULT
 export async function createOrder(db, body, totals, attributionJson) {
   const id = crypto.randomUUID();
   // The current checkout asks no marketing-preference question. Preserve
-  // choices submitted by cached earlier clients; US follow-up eligibility is
-  // decided at send time, while other destinations require the old opt-in.
+  // choices submitted by cached earlier clients; purchaser follow-up
+  // eligibility and explicit unsubscribes are checked again at send time.
   const reviewEligible = body.review_request_opt_out !== undefined
     ? body.review_request_opt_out === false : body.review_request_opt_in === true;
   await db.prepare(`
