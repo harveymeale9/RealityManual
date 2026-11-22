@@ -23817,6 +23817,15 @@ gaps. The short-gap cells also no longer carry a misleading missing-data
 hatch behind the smoothed line. Focused tests cover short-gap smoothing and
 long-gap preservation; a browser preview was checked against the live data.
 
+Follow-up (2026-11-22): a recurring one-hour hatch still appeared when the
+next successful YouTube snapshot had partial per-video coverage. The chart's
+short-gap smoothing unnecessarily required `view_coverage === 'complete'`,
+even though that next hour contained a measured counter gain. It now spreads
+the next observed gain across a one- or two-hour missed interval regardless
+of complete/partial coverage, marks those displayed hours as estimates, and
+leaves raw API bins and the measured total untouched. Longer or unbounded
+gaps remain unknown. A partial-coverage regression test covers the case.
+
 ## Hourly sales bars meet the day-summary baseline (2026-11-20)
 
 The hourly sales columns previously ended 29px above the horizontal divider

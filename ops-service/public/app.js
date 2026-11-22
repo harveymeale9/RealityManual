@@ -578,14 +578,16 @@
     var plotViews = bins.map(function (bin) { return bin.views == null ? null : Number(bin.views) || 0; });
     var smoothedHours = {};
     // A missed hourly poll is included in the next observed counter increase.
-    // Spread only one- or two-hour gaps over their covered hours for the line;
-    // keep the raw bins, headline total and hour details as measured data.
+    // Spread only one- or two-hour gaps over their covered hours for the line.
+    // A partial next poll still contains a measured counter gain; requiring
+    // complete coverage leaves routine one-hour holes in the visible line.
+    // Keep the raw bins and headline total as measured data.
     for (var gapStart = 1; gapStart < bins.length; gapStart++) {
       if (plotViews[gapStart] != null || plotViews[gapStart - 1] == null) continue;
       var next = gapStart;
       while (next < bins.length && plotViews[next] == null) next++;
       var missed = next - gapStart;
-      if (missed > 2 || next === bins.length || bins[next].view_coverage !== 'complete') continue;
+      if (missed > 2 || next === bins.length) continue;
       var observed = Number(bins[next].views) || 0;
       for (var fill = gapStart; fill <= next; fill++) {
         plotViews[fill] = observed / (missed + 1);

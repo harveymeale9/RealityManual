@@ -284,6 +284,14 @@ test('sales timing chart shows hourly views, books sold, upload markers and all 
   assert.match(shortGapHtml, /No poll; chart estimates ~10\/hour from the next 2-hour gain/);
   assert.match(shortGapHtml, /20 views measured across 2 hours; chart estimates ~10\/hour/);
   assert.match(shortGapHtml, /<polyline points="7\.5,\d+ 22\.5,\d+ 37\.5,\d+"\/>/);
+  const partialGapHtml = render({ days: 3, totals: { measured_views: 30, orders: 0, us_orders: 0 }, hourly: [
+    { at: '2026-11-22T04:00:00.000Z', views: 10, orders: 0, view_coverage: 'partial', uploads: [] },
+    { at: '2026-11-22T05:00:00.000Z', views: null, orders: 0, view_coverage: 'missing', uploads: [] },
+    { at: '2026-11-22T06:00:00.000Z', views: 20, orders: 0, view_coverage: 'partial', uploads: [] }
+  ] });
+  assert.match(partialGapHtml, /class="sales-timing-hour views-estimated"/);
+  assert.doesNotMatch(partialGapHtml, /class="sales-timing-hour views-missing"/);
+  assert.match(partialGapHtml, /<polyline points="7\.5,\d+ 22\.5,\d+ 37\.5,\d+"\/>/);
   const longGapHtml = render({ days: 3, totals: { measured_views: 30, orders: 0, us_orders: 0 }, hourly: [
     { at: '2026-11-13T10:00:00.000Z', views: 10, orders: 0, view_coverage: 'complete', uploads: [] },
     { at: '2026-11-13T11:00:00.000Z', views: null, orders: 0, view_coverage: 'missing', uploads: [] },
