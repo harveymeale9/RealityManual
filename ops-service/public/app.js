@@ -3485,7 +3485,7 @@
     noRelatedLongform.textContent = 'None — standalone short';
     fieldRelatedLongform.appendChild(noRelatedLongform);
     Object.keys(pieces).map(function (id) { return pieces[id]; }).filter(function (candidate) {
-      return candidate && candidate.contentType === 'longform' && candidate.hasVideo && candidate.id !== p.id;
+      return candidate && candidate.contentType === 'longform' && candidate.id !== p.id;
     }).sort(function (a, b) { return String(a.title || '').localeCompare(String(b.title || '')); }).forEach(function (candidate) {
       var option = document.createElement('option');
       option.value = candidate.id;

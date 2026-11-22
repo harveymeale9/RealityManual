@@ -24227,6 +24227,22 @@ opened a queued short's card on desktop and mobile: the related-long-form
 selector showed the standalone option plus thirteen existing long-form video
 cards, stayed usable at 390 px, and introduced no horizontal overflow.
 
+## Draft long-form links survive filming (2026-11-22)
+
+The related-long-form dropdown had mistakenly filtered to `hasVideo` cards,
+so Harvey could not link an in-progress short outline to its corresponding
+unfilmed long-form outline (#289 → #025). The server already accepted that
+planning-card ID; the dropdown now includes all long-form cards. Filming does
+not mutate an outline into a video: Editor creates a separate video card with
+its own ID. The short video therefore inherits the short outline's explicit
+`relatedLongformPieceId` when Editor links or approves it, and a directly
+uploaded video inherits it after a confirmed outline match. The scheduler and
+runway preview resolve a linked long-form outline through its actual Editor/
+Production video card before checking `stage: live` and `postedAt`; unrelated
+or merely scheduled videos cannot start the seven-full-day delay. Existing
+links to long-form video cards still work. The explicit relation remains a
+planning-card ID, never a guessed title match.
+
 ## Mobile Sales Analytics pinch zoom (2026-11-21)
 
 The hourly Sales Analytics plot previously fitted every selected hour into

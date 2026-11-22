@@ -102,6 +102,17 @@ test('short-form runway leaves slots open until a linked long-form has been live
   assert.equal(result.timeline[2].state, 'queued');
 });
 
+test('short-form runway resolves a planning-card link through its published video', function () {
+  const now = Date.parse('2026-11-21T12:00:00Z');
+  const short = Object.assign(ready('short', 'long_short'), { relatedLongformPieceId: 'outline' });
+  const outline = { id: 'outline', contentType: 'longform', hasVideo: false, stage: 'uploaded', editorProjectId: 'video' };
+  const video = { id: 'video', contentType: 'longform', hasVideo: true, sourcePlanningPieceId: 'outline', stage: 'live', postedAt: '2026-11-20T23:00:00Z' };
+  const result = coverage.calculate({ pieces: [short, outline, video], now: now,
+    postingSchedule: cadence.SHORTFORM_POSTING_SCHEDULE }).shortform;
+  assert.equal(result.timeline[0].state, 'open');
+  assert.equal(result.timeline[2].state, 'queued');
+});
+
 test('runway slots carry scheduled titles and identify queued titles as tentative candidates', function () {
   const now = Date.parse('2026-11-20T04:00:00Z');
   const pieces = [

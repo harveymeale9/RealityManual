@@ -26,7 +26,13 @@
   function shortEligibleAt(piece, pieces, slot) {
     if (!piece.relatedLongformPieceId) return true;
     var parent = pieces.find(function (other) { return other.id === piece.relatedLongformPieceId; });
-    var published = parent && parent.stage === 'live' && parent.contentType === 'longform' ? timestamp(parent.postedAt) : null;
+    if (!parent || parent.contentType !== 'longform') return false;
+    var release = parent.hasVideo === false ? pieces.find(function (other) {
+      return other.hasVideo && other.contentType === 'longform' &&
+        (other.id === parent.editorProjectId || other.sourcePlanningPieceId === parent.id ||
+          other.analysisMatchedPieceId === parent.id) && other.stage === 'live';
+    }) : parent;
+    var published = release && release.stage === 'live' ? timestamp(release.postedAt) : null;
     return published !== null && slot >= published + 7 * DAY_MS;
   }
   function isReady(piece) {

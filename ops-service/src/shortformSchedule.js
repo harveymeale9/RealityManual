@@ -93,9 +93,19 @@ function isShortform(piece) {
 // 24-hour days; a scheduled-but-delayed long-form must not start the clock.
 function shortformEligibleAt(piece, pieces, dueAt) {
   if (!piece || !piece.relatedLongformPieceId) return true;
-  const parent = (pieces || []).find(function (item) { return item.id === piece.relatedLongformPieceId; });
-  if (!parent || parent.contentType !== 'longform' || parent.stage !== 'live') return false;
-  const published = Date.parse(parent.postedAt || '');
+  const records = pieces || [];
+  const parent = records.find(function (item) { return item.id === piece.relatedLongformPieceId; });
+  if (!parent || parent.contentType !== 'longform') return false;
+  // Planning and published-video cards have separate identities. A short can
+  // point at the outline before filming; only its actual linked video starts
+  // the seven-day clock, never the outline's Uploaded stage.
+  const release = parent.hasVideo === false ? records.find(function (item) {
+    return item.hasVideo && item.contentType === 'longform' &&
+      (item.id === parent.editorProjectId || item.sourcePlanningPieceId === parent.id ||
+        item.analysisMatchedPieceId === parent.id) && item.stage === 'live';
+  }) : parent;
+  if (!release || release.stage !== 'live') return false;
+  const published = Date.parse(release.postedAt || '');
   const due = dueAt instanceof Date ? dueAt.getTime() : Date.parse(String(dueAt || ''));
   return Number.isFinite(published) && Number.isFinite(due) && due >= published + 7 * 86400000;
 }

@@ -47,6 +47,20 @@ test('linked shorts wait seven full days after the long-form actually goes live'
   assert.equal(schedule.shortformEligibleAt({ contentType: 'short' }, [live], '2026-11-22T22:45:00Z'), true);
 });
 
+test('a short linked to an unfilmed outline waits for that exact long-form video', function () {
+  const short = { id: 'short-video', contentType: 'long_short', relatedLongformPieceId: 'long-outline' };
+  const outline = { id: 'long-outline', contentType: 'longform', hasVideo: false, stage: 'uploaded', editorProjectId: 'long-video' };
+  const unrelated = { id: 'other-video', contentType: 'longform', hasVideo: true, stage: 'live', postedAt: '2026-11-01T00:00:00Z' };
+  const video = { id: 'long-video', contentType: 'longform', hasVideo: true, sourcePlanningPieceId: 'long-outline', stage: 'scheduled', scheduledAt: '2026-11-21T00:00:00Z' };
+  const due = '2026-11-28T00:00:00Z';
+  assert.equal(schedule.shortformEligibleAt(short, [short, outline, unrelated], due), false);
+  assert.equal(schedule.shortformEligibleAt(short, [short, outline, unrelated, video], due), false);
+  video.stage = 'live';
+  video.postedAt = '2026-11-21T00:00:00Z';
+  assert.equal(schedule.shortformEligibleAt(short, [short, outline, unrelated, video], '2026-11-27T23:59:59Z'), false);
+  assert.equal(schedule.shortformEligibleAt(short, [short, outline, unrelated, video], due), true);
+});
+
 test('missing Buffer schedule safely falls back to two daily GMT+7 slots', function () {
   assert.equal(schedule.nextBangkokSlot(Date.parse('2026-09-28T06:00:00Z'), []), '2026-09-28T17:00:00.000Z');
   assert.equal(schedule.isShortform({ contentType: 'short' }), true);

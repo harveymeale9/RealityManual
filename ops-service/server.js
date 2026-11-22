@@ -896,6 +896,8 @@ function createEditorVideoCard(input) {
       .reduce(function (max, item) { return Math.max(max, Number(item.order) || 0); }, 0) + 10,
     editorProjectId: project.id,
     sourcePlanningPieceId: project.planningPieceId || '',
+    relatedLongformPieceId: contentType !== 'longform' && project.planningPieceId
+      ? (getPieceRecord(project.planningPieceId) || {}).relatedLongformPieceId || '' : '',
     editorUnread: project.ingestSource === 'desktop_listener',
     ingestSource: project.ingestSource || 'browser',
     createdAt: project.createdAt || now,
@@ -917,6 +919,9 @@ function syncEditorVideoCard(input) {
   piece.videoIsVertical = contentType !== 'longform';
   piece.platforms = contentType === 'longform' ? ['ytlong', 'facebook'] : ACTIVE_SHORT_PLATFORMS.slice();
   piece.sourcePlanningPieceId = project.planningPieceId || '';
+  if (contentType !== 'longform' && !piece.relatedLongformPieceId && project.planningPieceId) {
+    piece.relatedLongformPieceId = (getPieceRecord(project.planningPieceId) || {}).relatedLongformPieceId || '';
+  }
   piece.audioTrackId = project.audioTrackId || '__none__';
   piece.updatedAt = new Date().toISOString();
   savePieceRecord(piece);
@@ -2981,6 +2986,9 @@ async function sendEditorProjectToProduction(input) {
     order: (previousStage === 'in_production' || returningFromProduction) && Number(existing.order) || maxProductionOrder + 10,
     editorProjectId: project.id,
     sourcePlanningPieceId: project.planningPieceId || '',
+    relatedLongformPieceId: returningFromProduction ? existing.relatedLongformPieceId || '' :
+      contentType !== 'longform' && project.planningPieceId
+        ? (getPieceRecord(project.planningPieceId) || {}).relatedLongformPieceId || '' : '',
     createdAt: existing && existing.createdAt || now,
     updatedAt: now
   }));
@@ -3141,6 +3149,9 @@ async function runVideoAnalysis(id, existingTranscript) {
     latest.transcript = transcript;
     latest.analysisStatus = 'done';
     latest.analysisMatchedPieceId = result.matchedPieceId || '';
+    if (shortformSchedule.isShortform(latest) && !latest.relatedLongformPieceId && result.matchedPieceId) {
+      latest.relatedLongformPieceId = (getPieceRecord(result.matchedPieceId) || {}).relatedLongformPieceId || '';
+    }
     videoAnalysis.applyGeneratedTitleSuggestions(latest, result);
     latest.updatedAt = new Date().toISOString();
     savePieceRecord(latest);
