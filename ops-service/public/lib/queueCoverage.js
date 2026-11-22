@@ -27,11 +27,13 @@
     if (!piece.relatedLongformPieceId) return true;
     var parent = pieces.find(function (other) { return other.id === piece.relatedLongformPieceId; });
     if (!parent || parent.contentType !== 'longform') return false;
-    var release = parent.hasVideo === false ? pieces.find(function (other) {
-      return other.hasVideo && other.contentType === 'longform' &&
-        (other.id === parent.editorProjectId || other.sourcePlanningPieceId === parent.id ||
-          other.analysisMatchedPieceId === parent.id) && other.stage === 'live';
-    }) : parent;
+    var video = parent.hasVideo === false
+      ? (parent.editorProjectId
+        ? pieces.find(function (other) { return other.id === parent.editorProjectId; })
+        : pieces.find(function (other) { return other.sourcePlanningPieceId === parent.id; }) ||
+          pieces.find(function (other) { return other.analysisMatchedPieceId === parent.id; }))
+      : parent;
+    var release = video && video.hasVideo !== false && video.contentType === 'longform' ? video : null;
     var published = release && release.stage === 'live' ? timestamp(release.postedAt) : null;
     return published !== null && slot >= published + 7 * DAY_MS;
   }

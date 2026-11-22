@@ -51,14 +51,15 @@ test('a short linked to an unfilmed outline waits for that exact long-form video
   const short = { id: 'short-video', contentType: 'long_short', relatedLongformPieceId: 'long-outline' };
   const outline = { id: 'long-outline', contentType: 'longform', hasVideo: false, stage: 'uploaded', editorProjectId: 'long-video' };
   const unrelated = { id: 'other-video', contentType: 'longform', hasVideo: true, stage: 'live', postedAt: '2026-11-01T00:00:00Z' };
+  const oldMatch = { id: 'old-match', contentType: 'longform', hasVideo: true, analysisMatchedPieceId: 'long-outline', stage: 'live', postedAt: '2026-11-01T00:00:00Z' };
   const video = { id: 'long-video', contentType: 'longform', hasVideo: true, sourcePlanningPieceId: 'long-outline', stage: 'scheduled', scheduledAt: '2026-11-21T00:00:00Z' };
   const due = '2026-11-28T00:00:00Z';
-  assert.equal(schedule.shortformEligibleAt(short, [short, outline, unrelated], due), false);
-  assert.equal(schedule.shortformEligibleAt(short, [short, outline, unrelated, video], due), false);
+  assert.equal(schedule.shortformEligibleAt(short, [short, outline, unrelated, oldMatch], due), false);
+  assert.equal(schedule.shortformEligibleAt(short, [short, outline, unrelated, oldMatch, video], due), false);
   video.stage = 'live';
   video.postedAt = '2026-11-21T00:00:00Z';
-  assert.equal(schedule.shortformEligibleAt(short, [short, outline, unrelated, video], '2026-11-27T23:59:59Z'), false);
-  assert.equal(schedule.shortformEligibleAt(short, [short, outline, unrelated, video], due), true);
+  assert.equal(schedule.shortformEligibleAt(short, [short, outline, unrelated, oldMatch, video], '2026-11-27T23:59:59Z'), false);
+  assert.equal(schedule.shortformEligibleAt(short, [short, outline, unrelated, oldMatch, video], due), true);
 });
 
 test('missing Buffer schedule safely falls back to two daily GMT+7 slots', function () {

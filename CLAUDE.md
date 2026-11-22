@@ -24241,7 +24241,9 @@ runway preview resolve a linked long-form outline through its actual Editor/
 Production video card before checking `stage: live` and `postedAt`; unrelated
 or merely scheduled videos cannot start the seven-full-day delay. Existing
 links to long-form video cards still work. The explicit relation remains a
-planning-card ID, never a guessed title match.
+planning-card ID, never a guessed title match. If the long-form outline has
+an explicit `editorProjectId`, that precise recording is authoritative; an
+older auto-matched video cannot start the wait clock in its place.
 
 The full ops-service suite passed (402 tests). CI redeployed `f5e725b`.
 An authenticated 390 px Chromium session on the public ops domain showed

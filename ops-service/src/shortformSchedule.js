@@ -99,11 +99,13 @@ function shortformEligibleAt(piece, pieces, dueAt) {
   // Planning and published-video cards have separate identities. A short can
   // point at the outline before filming; only its actual linked video starts
   // the seven-day clock, never the outline's Uploaded stage.
-  const release = parent.hasVideo === false ? records.find(function (item) {
-    return item.hasVideo && item.contentType === 'longform' &&
-      (item.id === parent.editorProjectId || item.sourcePlanningPieceId === parent.id ||
-        item.analysisMatchedPieceId === parent.id) && item.stage === 'live';
-  }) : parent;
+  const video = parent.hasVideo === false
+    ? (parent.editorProjectId
+      ? records.find(function (item) { return item.id === parent.editorProjectId; })
+      : records.find(function (item) { return item.sourcePlanningPieceId === parent.id; }) ||
+        records.find(function (item) { return item.analysisMatchedPieceId === parent.id; }))
+    : parent;
+  const release = video && video.hasVideo !== false && video.contentType === 'longform' ? video : null;
   if (!release || release.stage !== 'live') return false;
   const published = Date.parse(release.postedAt || '');
   const due = dueAt instanceof Date ? dueAt.getTime() : Date.parse(String(dueAt || ''));
