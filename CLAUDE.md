@@ -24469,7 +24469,7 @@ for this unshipped change.
 Harvey explicitly directed that the one-time `Face Reveal!` follow-up be
 eligible for purchasers in every country, without a checkout marketing
 choice. Removed the country and legacy `review_request_opt_in` checks from
-both the live Worker source and paused VPS fallback candidate/recheck logic.
+both the Worker code and paused VPS fallback candidate/recheck logic.
 Eligibility still requires a real paid shipped order, BookVault dispatch,
 the post-estimated-delivery delay, no refund, no previous send, a synced
 Resend contact, and no explicit unsubscribe in either Resend or any order
@@ -24483,6 +24483,10 @@ manually suppress addresses when a reply asks to stop emails; no automatic
 reply is sent. This does not yet automate Resend/Worker suppression from an
 inbound email. Worker, backend, and mail-triage tests cover the expanded
 audience and reply notification.
+
+Verification after push `73b225a`: 94 backend/Worker tests and eight mail
+triage tests passed. The public privacy page served its new copy. CI recorded
+a successful ops-service rebuild at `73b225a`, and `/api/health` returned OK.
 
 Compliance caveat: the linked `/iloveyou` page contains a voucher and paid
 review invitation, so the approved email may be treated as direct marketing
