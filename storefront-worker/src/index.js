@@ -9,6 +9,7 @@ import { aggregateCompletedDays, getSummary, recordEvent } from './analytics.js'
 import { getEmailHealth } from './emailHealth.js';
 import { allowedReportSource, reportSnapshot } from './reportSnapshot.js';
 import { issueVoucher } from './vouchers.js';
+import { tagReaderSubmission } from './readerTags.js';
 const VSL_PATH = '/media/reality-manual-vsl-1080p.mp4';
 const VSL_KEY = 'storefront/reality-manual-vsl-c1a7775e.mp4';
 
@@ -59,6 +60,10 @@ export default {
     if (path === '/api/internal/feedback-voucher' && request.method === 'POST') {
       if (!allowedReportSource(request, env)) return new Response(null, { status: 403 });
       return issueVoucher(request, env);
+    }
+    if (path === '/api/internal/reader-tags' && request.method === 'POST') {
+      if (!allowedReportSource(request, env)) return new Response(null, { status: 403 });
+      return tagReaderSubmission(request, env);
     }
     if (checkoutReady && path === '/api/webhooks/stripe' && request.method === 'POST') {
       const response = await stripeWebhook(request, env);

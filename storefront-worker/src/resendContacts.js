@@ -5,6 +5,9 @@ const PROPERTIES = [
   ['last_order_quantity', 'number'], ['largest_order_quantity', 'number'],
   ['lifetime_book_quantity', 'number'], ['purchase_order_count', 'number'],
   ['quantity_band', 'string'], ['first_purchase_at', 'string'], ['latest_purchase_at', 'string'],
+  ['reader_feedback_left', 'string'], ['reader_review_left', 'string'],
+  ['reader_video_review_left', 'string'], ['reader_opinion', 'string'],
+  ['reader_affinity', 'string'], ['reader_opinion_at', 'string'],
 ];
 
 async function request(env, path, method = 'GET', body) {
@@ -71,4 +74,26 @@ export async function syncPurchaserContact(env, order, summary) {
     email: order.email.trim().toLowerCase(), ...body,
     unsubscribed: false, segments: [{ id: segmentId }],
   });
+}
+
+// Only the authenticated internal reader-submission route calls this after
+// checking a paid order. Preserve existing flags and never touch unsubscribe.
+export async function tagPurchaserFromReaderSubmission(env, input) {
+  await ensurePurchaserSchema(env);
+  const contact = await getContactByEmail(env, input.email);
+  if (!contact) return false; // Purchaser contact sync may still be pending.
+  const prior = contact.properties || {};
+  const properties = {};
+  if (input.kind === 'feedback') properties.reader_feedback_left = 'yes';
+  else {
+    properties.reader_review_left = 'yes';
+    if (input.hasVideo) properties.reader_video_review_left = 'yes';
+  }
+  if (input.opinion !== 'unclear' && (!prior.reader_opinion_at || input.submittedAt >= prior.reader_opinion_at)) {
+    properties.reader_opinion = input.opinion;
+    properties.reader_affinity = ({ positive: 'fan', very_positive: 'super_fan', exceptional: 'devoted_fan' })[input.opinion] || 'none';
+    properties.reader_opinion_at = input.submittedAt;
+  }
+  await request(env, `/contacts/${encodeURIComponent(input.email)}`, 'PATCH', { properties });
+  return true;
 }
