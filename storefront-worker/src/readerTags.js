@@ -1,6 +1,6 @@
 import { tagPurchaserFromReaderSubmission } from './resendContacts.js';
 
-const PAID = `order_status != 'REFUNDED' AND
+const PAID = `stripe_livemode=1 AND order_status != 'REFUNDED' AND
   (stripe_payment_status IN ('succeeded','paid') OR order_status IN
   ('PAYMENT_RECEIVED','BOOKVAULT_PENDING','BOOKVAULT_ACCEPTED','FULFILLMENT_RETRY','SHIPPED','COMPLETE'))`;
 const OPINIONS = new Set(['unclear', 'critical', 'mixed', 'positive', 'very_positive', 'exceptional']);

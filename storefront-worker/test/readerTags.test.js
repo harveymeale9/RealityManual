@@ -13,6 +13,7 @@ test('reader tags require a paid matching customer; unmatched and invalid forms 
   let matched = false, tagged = 0;
   const env = { DB: { prepare(sql) {
     assert.match(sql, /lower\(trim\(email\)\)=\?/);
+    assert.match(sql, /stripe_livemode=1/);
     assert.match(sql, /order_status != 'REFUNDED'/);
     return { bind(email) { assert.equal(email, 'reader@example.test'); return { first: async () => matched ? { id: 'paid-order' } : null }; } };
   } } };

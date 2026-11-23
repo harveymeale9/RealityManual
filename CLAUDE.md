@@ -23847,7 +23847,7 @@ reply to the reader.
 
 The processor calls a narrowly scoped internal Worker endpoint using the
 existing owner-installed report token and VPS IP allowlist. The Worker verifies
-that the normalized email matches a paid, non-refunded order in the live D1
+that the normalized email matches a live-mode paid, non-refunded order in the live D1
 database before changing the matching Resend purchaser contact. The contact
 receives separate feedback/review/video-review flags (video also sets review)
 and the latest substantive opinion/affinity tier. It does not change the
@@ -23857,7 +23857,9 @@ idempotence and displayed on the private reader-messages page. The storefront
 privacy notice now discloses this text assessment and customer tagging.
 
 The production Worker endpoint deployed as version
-`ae64cf67-d380-42b2-8cf7-ba0d6e212b12`. Its health returned 200,
+`810ddd8e-c204-46e5-8720-fc94356d424d` (a follow-up added the
+live-mode order check; all 77 current paid, non-refunded production orders
+were confirmed live-mode). Its health returned 200,
 an unauthenticated tag request returned 403, and an authenticated synthetic
 email with no paid order returned `matched:false,tagged:false` without
 touching any customer. All three existing reader submissions were marked
