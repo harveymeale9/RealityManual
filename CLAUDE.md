@@ -23833,6 +23833,38 @@ artificial deep dip in the line, so the partial next reading is kept at its
 measured value. Raw API bins and headline totals remain untouched; longer or
 unbounded gaps remain unknown. A partial-coverage regression test covers it.
 
+## Reader submission purchaser tags and opinion tiers (2026-11-23)
+
+Completed `/iloveyou/` forms are now evaluated for customer tagging by
+Content Studio's `readerAffinity` processor. It sends only sufficiently
+substantive message text, without the form name/email fields, to the existing
+no-tools structured classifier. Its conservative categories are unclear,
+critical, mixed, positive, very positive and exceptional; the positive tiers
+appear as Fan, Super fan and Devoted fan. Short messages remain unclear, and
+explicit historical `QA TEST ONLY` submissions are skipped. This classification
+does not determine voucher eligibility or paid-video eligibility and sends no
+reply to the reader.
+
+The processor calls a narrowly scoped internal Worker endpoint using the
+existing owner-installed report token and VPS IP allowlist. The Worker verifies
+that the normalized email matches a paid, non-refunded order in the live D1
+database before changing the matching Resend purchaser contact. The contact
+receives separate feedback/review/video-review flags (video also sets review)
+and the latest substantive opinion/affinity tier. It does not change the
+contact's unsubscribe status. A missing contact is retried after purchaser
+sync; an unmatched email is retried daily. Form-side status is persisted for
+idempotence and displayed on the private reader-messages page. The storefront
+privacy notice now discloses this text assessment and customer tagging.
+
+The production Worker endpoint deployed as version
+`ae64cf67-d380-42b2-8cf7-ba0d6e212b12`. Its health returned 200,
+an unauthenticated tag request returned 403, and an authenticated synthetic
+email with no paid order returned `matched:false,tagged:false` without
+touching any customer. All three existing reader submissions were marked
+`QA TEST ONLY`, so the backfill skips them rather than assigning test opinions
+to Harvey's contact. Worker and Content Studio test suites passed before the
+Content Studio deploy.
+
 ## Hourly sales bars meet the day-summary baseline (2026-11-20)
 
 The hourly sales columns previously ended 29px above the horizontal divider

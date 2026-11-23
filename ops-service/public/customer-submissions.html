@@ -22,6 +22,18 @@
       const meta = document.createElement('p'); meta.className = 'meta'; meta.textContent = new Date(item.submittedAt).toLocaleString() + ' · ' + item.email;
       const body = document.createElement('p'); body.className = 'message'; body.textContent = item.message;
       card.append(title, meta, body);
+      if (item.readerTags) {
+        const tags = document.createElement('p'); tags.className = 'meta';
+        const category = type + ' left';
+        const tier = { positive: 'Fan', very_positive: 'Super fan', exceptional: 'Devoted fan',
+          mixed: 'Mixed opinion', critical: 'Critical opinion', unclear: 'Opinion unclear' }[item.readerTags.opinion] || 'Opinion pending';
+        tags.textContent = item.readerTags.status === 'tagged'
+          ? 'Matched purchaser · ' + category + ' · ' + tier
+          : item.readerTags.status === 'unmatched' ? 'No matching paid customer email · ' + tier
+          : item.readerTags.status === 'pending_contact' ? 'Paid customer matched · contact tag pending · ' + tier
+          : 'Customer tag pending · ' + tier;
+        card.append(tags);
+      }
       if (item.paidVideo) { const paid = document.createElement('p'); paid.className = 'badge'; paid.textContent = '$50 video consideration requested — verify eligibility and contact them for payment details.'; card.append(paid); }
       if (item.kind === 'feedback' && item.voucherReview) {
         const voucher = document.createElement('p'); voucher.className = 'meta';

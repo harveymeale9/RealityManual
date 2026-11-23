@@ -205,6 +205,7 @@ function setup(db, options) {
       id: data.id, kind: data.kind, name: data.name, email: data.email, message: data.message,
       paidVideo: data.paidVideo, consent: data.consent, consentVersion: data.consentVersion,
       submittedAt: data.submittedAt, seenAt: data.seenAt || null,
+      readerTags: data.readerTags ? { status: data.readerTags.status, opinion: data.readerTags.opinion } : null,
       voucherReview: data.voucherReview ? { status: data.voucherReview.status, reason: data.voucherReview.reason || '', sentAt: data.voucherReview.sentAt || null } : null,
       files: data.files.map(publicFile)
     }; }) });
