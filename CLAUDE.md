@@ -24682,3 +24682,29 @@ and a browser title edit both persisted without a conflict toast. The test
 card was removed through the normal API afterward. The complete ops-service
 suite passed (405 tests). The old test that pinned the previous store.js
 cache-buster was updated to check its versioned form instead.
+
+## Weekly shipping-price audit: 16–23 November 2026 (2026-11-23)
+
+The scheduled audit covered paid orders created from
+2026-11-16T09:00:00Z inclusive to 2026-11-23T09:00:00Z exclusive. The live
+storefront uses production Cloudflare D1 `rm-storefront-prod`; the VPS SQLite
+database is a paused fallback, not the current order authority. There were
+21 records in the window: 20 live paid BookVault-accepted orders and one
+failed payment, which was excluded. Neither owner-marked test order fell in
+the window; there were no refunded orders. The 20 paid orders contained
+22 books, including one three-book order.
+
+Each paid order had a saved shipping service, USD shipping charge, BookVault
+dispatch cost in GBP, and GBP/USD rate. The original charge matched the
+actual dispatch cost converted at the saved rate exactly to the cent for all
+20 orders. Real destinations and quantities were privately replayed through
+the production non-order-creating `/api/shipping/calculate` endpoint and
+BookVault's non-order-creating UK-partner-1 GBP `/v3/Dispatch` quote. Every
+fresh GBP quote matched the saved actual dispatch tariff and service ID/name;
+today's form USD prices differed from original charges by at most 15 cents,
+consistent with later reference-rate movement. None exceeded the greater-of-
+$2-or-10% investigation threshold, and no costs, rates, or quotes were
+missing. Checkout still requotes server-side before creating a payment intent,
+and fulfillment requests the service ID quoted for that order. No pricing
+logic error was found, so no production code, customer charge, or fulfillment
+state was changed; an owner alert email was not warranted.
