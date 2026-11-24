@@ -126,8 +126,8 @@ function orderConfirmedEmail(order, { preview = false } = {}) {
   ]);
   const body = `
     <p style="margin:0 0 18px;">Thank you, ${escapeHtml(firstName(order.customer_name))}. We have received your payment and accepted your order for <em>The Reality Manual</em>.</p>
-    <p style="margin:0;">Every copy is printed, bound, carefully inspected and finished to order by one of Europe’s leading printers of bespoke books. Nothing is pulled from a warehouse shelf. Your book receives the time and individual attention needed to create a beautiful volume you can return to and keep for a lifetime.</p>`;
-  const callout = `We are arranging production with our bespoke printer. If that takes longer than expected, you do not need to pay again or take any action. We aim to resolve any printer issue within 60 hours and will issue a full refund if we cannot fulfill your order. Once in production, please allow up to <strong style="color:${BRAND.gold};">15 working days</strong> before dispatch. We’ll email you when your copy ships.`;
+    <p style="margin:0;"><em>The Reality Manual</em> is not a mass-produced paperback. Each hardcover copy is individually printed and bound to order by a specialist book manufacturer in England.</p>`;
+  const callout = `We are arranging production with our book manufacturer in England. If that takes longer than expected, you do not need to pay again or take any action. We aim to resolve any printer issue within 60 hours and will issue a full refund if we cannot fulfill your order. Once in production, please allow up to <strong style="color:${BRAND.gold};">15 working days</strong> before dispatch. We’ll email you when your copy ships.`;
   const text = [
     preview ? 'SAMPLE PREVIEW: NOT A REAL ORDER' : '',
     'THE REALITY MANUAL',
@@ -136,9 +136,9 @@ function orderConfirmedEmail(order, { preview = false } = {}) {
     '',
     `Thank you, ${firstName(order.customer_name)}. We have received your payment and accepted your order for The Reality Manual.`,
     '',
-    'Every copy is printed, bound, carefully inspected and finished to order by one of Europe’s leading printers of bespoke books. Nothing is pulled from a warehouse shelf. Your book receives the time and individual attention needed to create a beautiful volume you can return to and keep for a lifetime.',
+    'The Reality Manual is not a mass-produced paperback. Each hardcover copy is individually printed and bound to order by a specialist book manufacturer in England.',
     '',
-    'We are arranging production with our bespoke printer. If that takes longer than expected, you do not need to pay again or take any action. We aim to resolve any printer issue within 60 hours and will issue a full refund if we cannot fulfill your order. Once in production, please allow up to 15 working days before dispatch. We will email you when your copy ships.',
+    'We are arranging production with our book manufacturer in England. If that takes longer than expected, you do not need to pay again or take any action. We aim to resolve any printer issue within 60 hours and will issue a full refund if we cannot fulfill your order. Once in production, please allow up to 15 working days before dispatch. We will email you when your copy ships.',
     '',
     `Order: ${orderNumber}`,
     'Edition: Hardcover, Deluxe First Edition',
@@ -186,7 +186,7 @@ function orderShippedEmail(order, shipment = {}, { preview = false } = {}) {
   const subject = `${preview ? '[PREVIEW] ' : ''}Your Copy of The Reality Manual Is on Its Way`;
   const body = `
     <p style="margin:0 0 18px;">Wonderful news, ${escapeHtml(firstName(order.customer_name))}. Your copy of <em>The Reality Manual</em> is complete and on its way to you.</p>
-    <p style="margin:0;">Thank you for your patience while our bespoke printer created, inspected and carefully packed your book. We hope opening it feels every bit as special as the care that went into making it${trackingUrl ? '. You can follow its journey below' : ''}.</p>`;
+    <p style="margin:0;">Thank you for your patience while your hardcover copy was printed and bound to order by our specialist book manufacturer in England. We hope you love it${trackingUrl ? '. You can follow its journey below' : ''}.</p>`;
   const text = [
     preview ? 'SAMPLE PREVIEW: NOT A REAL ORDER' : '',
     'THE REALITY MANUAL',
@@ -195,7 +195,7 @@ function orderShippedEmail(order, shipment = {}, { preview = false } = {}) {
     '',
     `Wonderful news, ${firstName(order.customer_name)}. Your copy of The Reality Manual is complete and on its way to you.`,
     '',
-    'Thank you for your patience while our bespoke printer created, inspected and carefully packed your book. We hope opening it feels every bit as special as the care that went into making it.',
+    'Thank you for your patience while your hardcover copy was printed and bound to order by our specialist book manufacturer in England. We hope you love it.',
     '',
     `Order: ${orderNumber}`,
     `Carrier: ${carrier}`,

@@ -120,7 +120,7 @@ test('checkout uses only the branded confirmation flow and confirmation omits or
   assert.match(confirmationPage, /reality-manual-deluxe-hardcover-cutout\.webp/);
   assert.match(confirmationPage, /We're Confirming Your Order\. Please wait/);
   assert.doesNotMatch(confirmationPage, /order-meta/);
-  assert.match(confirmationScript, /Our Expert Bookbinders Are Rolling Up Their Sleeves!/);
+  assert.match(confirmationScript, /Your Hardcover Is Being Made to Order!/);
   assert.match(confirmationScript, /✓ Order confirmed/);
   assert.match(confirmationScript, /classList\.add\('is-success'\)/);
   assert.match(confirmationScript, /setWaitingTitle/);

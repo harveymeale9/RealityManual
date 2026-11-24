@@ -24708,3 +24708,20 @@ missing. Checkout still requotes server-side before creating a payment intent,
 and fulfillment requests the service ID quoted for that order. No pricing
 logic error was found, so no production code, customer charge, or fulfillment
 state was changed; an owner alert email was not warranted.
+
+## Book-manufacturer wording across storefront and order emails (2026-11-24)
+
+Harvey flagged the FAQ's claim that the book is made by "one of Europe's
+leading bespoke bookbinders" as misleading and supplied the replacement:
+"The Reality Manual is not a mass-produced paperback. Each hardcover copy is
+individually printed and bound to order by a specialist book manufacturer in
+England." The homepage FAQ and its retained `home2` copy use that sentence.
+The purchase lede, checkout shipping explanation, order-confirmation and
+dispatch email HTML/plain text, and confirmation/status UI were aligned with
+the same factual manufacturer description. Unsupported supplier superlatives
+and claims of individualized hand attention were removed; production timing,
+shipping notices, and payment/fulfillment behavior were unchanged.
+
+The order email template is shared by the paused VPS backend and the active
+Cloudflare Worker, so the Worker must be redeployed for future customer emails
+to use the new text. Backend and Worker test suites passed (59 and 37 tests).

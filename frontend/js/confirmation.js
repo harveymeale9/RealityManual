@@ -86,7 +86,7 @@
       statusEyebrow.textContent = '✓ Order confirmed';
       statusEyebrow.classList.add('is-success');
       statusTitle.removeAttribute('aria-label');
-      statusTitle.textContent = 'Our Expert Bookbinders Are Rolling Up Their Sleeves!';
+      statusTitle.textContent = 'Your Hardcover Is Being Made to Order!';
       statusMessage.textContent = "Thank you! Your payment has been received and your order has been confirmed. Please bear in mind that it can take up to 15 business days for us to print your Reality Manual. We'll send you another email as soon as we ship your order!";
       trackPurchase(order);
       return true;
@@ -183,7 +183,7 @@
       statusEyebrow.classList.remove('is-success');
       setWaitingTitle();
       statusTitle.style.color = '';
-      statusMessage.textContent = "We're confirming your payment and placing your order with our expert bookbinders now. This usually only takes a moment.";
+      statusMessage.textContent = "We're confirming your payment and placing your order with our book manufacturer in England now. This usually only takes a moment.";
       countdown.hidden = false;
       secondsRemaining = demoDurationSeconds;
       updateCountdown();
