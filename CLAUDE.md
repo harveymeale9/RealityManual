@@ -24728,3 +24728,14 @@ The live Worker was deployed as version
 `4d1d49d7-d97d-47ad-9804-ec65798777e0`; its production health check
 returned checkout enabled. GitHub Pages then served the revised FAQ, checkout
 explanation, and confirmation script. No customer email was sent as a test.
+
+## Shipping FAQ separates production from transit (2026-11-24)
+
+The homepage FAQ (and retained `home2` copy) said most orders arrive within
+7–14 days, while the confirmation screen and order email allowed up to 15
+business/working days for printing before dispatch. Harvey asked to correct
+that potentially misleading arrival expectation. The FAQ now says to allow
+up to 15 business days for printing and binding before dispatch, makes clear
+that shipping time begins afterward and varies by destination and service,
+and promises the existing dispatch email. No checkout price, fulfillment
+timing, or automated email logic changed.
