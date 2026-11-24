@@ -24723,5 +24723,8 @@ and claims of individualized hand attention were removed; production timing,
 shipping notices, and payment/fulfillment behavior were unchanged.
 
 The order email template is shared by the paused VPS backend and the active
-Cloudflare Worker, so the Worker must be redeployed for future customer emails
-to use the new text. Backend and Worker test suites passed (59 and 37 tests).
+Cloudflare Worker. Backend and Worker test suites passed (59 and 37 tests).
+The live Worker was deployed as version
+`4d1d49d7-d97d-47ad-9804-ec65798777e0`; its production health check
+returned checkout enabled. GitHub Pages then served the revised FAQ, checkout
+explanation, and confirmation script. No customer email was sent as a test.
