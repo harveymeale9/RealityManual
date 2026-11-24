@@ -24736,6 +24736,8 @@ The homepage FAQ (and retained `home2` copy) said most orders arrive within
 business/working days for printing before dispatch. Harvey asked to correct
 that potentially misleading arrival expectation. The FAQ now says to allow
 up to 15 business days for printing and binding before dispatch, makes clear
-that shipping time begins afterward and varies by destination and service,
+that shipping time begins afterward and varies by destination,
 and promises the existing dispatch email. No checkout price, fulfillment
 timing, or automated email logic changed.
+Harvey then specifically removed the reference to delivery service; both FAQ
+copies now mention destination only.
