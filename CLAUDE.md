@@ -24751,3 +24751,14 @@ copies will ever be printed." The note uses the existing storefront type and
 gold palette, remains legible on mobile, and does not alter checkout behavior.
 The retained `/home2/` copy has matching markup. Both pages revision their
 stylesheet URL so visitors receive the new styling despite cached CSS.
+
+## Hardcover-only FAQ and vision placeholder (2026-11-25)
+
+Harvey replaced the digital-edition FAQ on the live homepage and retained
+`/home2/` alias. It now asks about digital and audiobook versions and states
+that The Reality Manual is hardcover-only and will never be released in either
+format. Only the word "vision" links to `/vision`, matching Harvey's supplied
+copy. A lightweight `/vision/` page is now present as an intentionally short,
+noindex coming-soon teaser. It reuses the storefront's book image, fonts, and
+warm gold palette, and links back to the homepage. No checkout or email copy
+was changed.
