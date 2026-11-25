@@ -24804,3 +24804,12 @@ video is still only an ideation-stage Content Studio piece, not a public
 video, so the `/vision/` placeholder now explicitly says the video is in
 development; it does not imply playback is currently available. This change
 does not publish a video or change the physical-book checkout.
+
+## Vision page is explicitly a placeholder (2026-11-25)
+
+Harvey asked for `/vision/` to look more clearly contentless and coming soon.
+The previous thematic headline and book image were removed. The page now has
+only a centered "Coming soon" heading, a short statement that the full vision
+and video are not available yet, and a concise back link. It retains the
+storefront's restrained dark/gold style and noindex metadata. Desktop and
+320/390px mobile checks found no horizontal overflow or hidden navigation.

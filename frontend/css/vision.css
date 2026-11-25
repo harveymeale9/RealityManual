@@ -24,6 +24,7 @@
   text-decoration: none;
   border: 0;
   padding: 0;
+  white-space: nowrap;
 }
 
 .vision-page .site-nav a:hover,
@@ -38,30 +39,23 @@
   align-items: center;
   overflow: hidden;
   background:
-    radial-gradient(ellipse at 69% 48%, rgba(160, 101, 27, 0.19), transparent 47%),
-    linear-gradient(135deg, #0e0b07, #18120a 62%, #0e0b07);
+    radial-gradient(ellipse at 50% 48%, rgba(160, 101, 27, 0.14), transparent 55%),
+    var(--bg);
 }
 
 .vision-main__inner {
-  position: relative;
-  width: min(100%, 1180px);
+  width: min(100%, 780px);
   margin: auto;
-  padding: clamp(4rem, 9vw, 8rem) 1.5rem;
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr);
-  align-items: center;
-  gap: clamp(2rem, 6vw, 6rem);
+  padding: clamp(5rem, 12vw, 9rem) 1.5rem;
+  text-align: center;
 }
 
-.vision-main__content { position: relative; z-index: 1; }
-
-.vision-main .eyebrow { margin-bottom: 1.4rem; }
+.vision-main .eyebrow { margin-bottom: 1.5rem; }
 
 .vision-main h1 {
-  max-width: 11ch;
   margin: 0;
-  font-size: clamp(3.8rem, 7vw, 6.9rem);
-  line-height: 0.94;
+  font-size: clamp(4.2rem, 10vw, 8rem);
+  line-height: 1;
 }
 
 .vision-main h1 em {
@@ -73,8 +67,8 @@
   display: flex;
   align-items: center;
   gap: 1rem;
-  width: min(100%, 420px);
-  margin: clamp(2rem, 4vw, 3rem) 0;
+  width: min(100%, 360px);
+  margin: clamp(2rem, 4vw, 3rem) auto;
   color: var(--accent);
   font-size: 0.9rem;
 }
@@ -90,42 +84,11 @@
 .vision-main__rule::after { transform: rotate(180deg); }
 
 .vision-main__message {
-  max-width: 32rem;
-  margin: 0;
+  max-width: 29rem;
+  margin: 0 auto;
   color: var(--ink-soft);
   font-size: clamp(1rem, 1.5vw, 1.2rem);
   line-height: 1.7;
-}
-
-.vision-main__status {
-  display: inline-block;
-  margin: 2.4rem 0 0;
-  padding: 0.65rem 1.1rem;
-  border: 1px solid rgba(201, 162, 77, 0.58);
-  color: var(--accent-2);
-  font-size: 0.7rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
-
-.vision-main__book { position: relative; }
-
-.vision-main__book::before {
-  content: '';
-  position: absolute;
-  inset: 8% -12%;
-  border: 1px solid rgba(201, 162, 77, 0.13);
-  border-radius: 50%;
-  transform: rotate(-17deg);
-}
-
-.vision-main__book img {
-  position: relative;
-  display: block;
-  width: min(100%, 420px);
-  height: auto;
-  margin-inline: auto;
-  filter: drop-shadow(0 30px 35px rgba(0, 0, 0, 0.68)) drop-shadow(0 0 28px rgba(201, 162, 77, 0.16));
 }
 
 .vision-footer {
@@ -139,19 +102,10 @@
 
 @media (max-width: 700px) {
   .vision-main__inner {
-    grid-template-columns: 1fr;
-    gap: 3rem;
-    padding-block: 4.5rem 3rem;
-    text-align: center;
+    padding-block: 5rem;
   }
 
-  .vision-main h1,
-  .vision-main__rule,
-  .vision-main__message { margin-inline: auto; }
-
-  .vision-main h1 { font-size: clamp(3.4rem, 13vw, 5rem); }
-
-  .vision-main__book img { width: min(58vw, 280px); }
+  .vision-main h1 { font-size: clamp(4rem, 17vw, 6rem); }
 
   .vision-page .site-nav a { font-size: 0.72rem; }
 }
