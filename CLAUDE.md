@@ -24784,3 +24784,13 @@ collectible potential. The displayed phrase "grand vision" links to the
 existing `/vision` placeholder. This is owner-provided marketing copy, not a
 new profit-allocation ledger, resale guarantee, inventory cap, or pricing
 mechanism; those projections were not independently verified by this change.
+
+## Vision link in the storefront header (2026-11-25)
+
+Harvey asked for a visible link to `/vision` in the homepage header. The live
+homepage and retained `/home2/` alias now center "Our Grand Vision" between
+the wordmark and checkout button at desktop widths. At 820px and below, the
+same destination appears inside the existing menu so the header stays clear.
+Both pages revision their stylesheet URL. Browser checks at 1440, 900, 821,
+820, 390, and 320px confirmed centering, no overlap or horizontal overflow,
+and a working mobile link to `/vision/`.
