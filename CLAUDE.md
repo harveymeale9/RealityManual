@@ -24741,3 +24741,13 @@ and promises the existing dispatch email. No checkout price, fulfillment
 timing, or automated email logic changed.
 Harvey then specifically removed the reference to delivery service; both FAQ
 copies now mention destination only.
+
+## Limited first-edition note in the purchase section (2026-11-25)
+
+At Harvey's request, the live homepage's first purchase block now places a
+gold-framed limited-edition note between the hardcover heading and the
+manufacturing description: "Limited First Edition" and "No more than 10,000
+copies will ever be printed." The note uses the existing storefront type and
+gold palette, remains legible on mobile, and does not alter checkout behavior.
+The retained `/home2/` copy has matching markup. Both pages revision their
+stylesheet URL so visitors receive the new styling despite cached CSS.
