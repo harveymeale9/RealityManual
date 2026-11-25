@@ -24762,3 +24762,13 @@ copy. A lightweight `/vision/` page is now present as an intentionally short,
 noindex coming-soon teaser. It reuses the storefront's book image, fonts, and
 warm gold palette, and links back to the homepage. No checkout or email copy
 was changed.
+
+## First-edition limit FAQ (2026-11-25)
+
+Harvey supplied a new three-paragraph FAQ explaining the 10,000-copy cap,
+planned discontinuation of the current edition, and his intended future
+ultra-luxury edition. It appears immediately before "Why is the book so
+expensive?" on the live homepage and retained `/home2/` alias. The phrase
+"grand vision" links to `/vision`, which currently remains a coming-soon
+placeholder. This was a copy-only change; no edition inventory or checkout
+limit was implemented by the FAQ itself.
