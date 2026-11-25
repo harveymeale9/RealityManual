@@ -24772,3 +24772,15 @@ expensive?" on the live homepage and retained `/home2/` alias. The phrase
 "grand vision" links to `/vision`, which currently remains a coming-soon
 placeholder. This was a copy-only change; no edition inventory or checkout
 limit was implemented by the FAQ itself.
+
+## Pricing FAQ expands on the proposed vision (2026-11-25)
+
+Harvey supplied two additional paragraphs for "Why is the book so expensive?"
+on the homepage and retained `/home2/` alias. They state his commitment to
+dedicate at least 50% of profits to Phase 2 of the vision, describe the planned
+ultra-luxury non-profit organization and future edition, and present his
+one-to-two-year sellout expectation and the first edition's speculative
+collectible potential. The displayed phrase "grand vision" links to the
+existing `/vision` placeholder. This is owner-provided marketing copy, not a
+new profit-allocation ledger, resale guarantee, inventory cap, or pricing
+mechanism; those projections were not independently verified by this change.
