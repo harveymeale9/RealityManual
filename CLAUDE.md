@@ -24794,3 +24794,13 @@ same destination appears inside the existing menu so the header stays clear.
 Both pages revision their stylesheet URL. Browser checks at 1440, 900, 821,
 820, 390, and 320px confirmed centering, no overlap or horizontal overflow,
 and a working mobile link to `/vision/`.
+
+## Grand-vision FAQ and video placeholder (2026-11-25)
+
+Harvey supplied a five-paragraph answer to "What is the grand vision for The
+Reality Manual?" It now ends the FAQ on the live homepage and retained
+`/home2/` alias. The final invitation links to `/vision`. The corresponding
+video is still only an ideation-stage Content Studio piece, not a public
+video, so the `/vision/` placeholder now explicitly says the video is in
+development; it does not imply playback is currently available. This change
+does not publish a video or change the physical-book checkout.
