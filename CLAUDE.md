@@ -24813,3 +24813,7 @@ only a centered "Coming soon" heading, a short statement that the full vision
 and video are not available yet, and a concise back link. It retains the
 storefront's restrained dark/gold style and noindex metadata. Desktop and
 320/390px mobile checks found no horizontal overflow or hidden navigation.
+
+## FAQ YouTube subscription link (2026-11-26)
+
+Harvey requested the FAQ's YouTube-channel link use the subscription-confirmation URL. Updated the "Where can I learn more about The Reality Manual?" answer on both the live homepage source and retained `/home2/` alias to `https://www.youtube.com/@the_reality_manual?sub_confirmation=1`. No other YouTube links or FAQ copy changed.
