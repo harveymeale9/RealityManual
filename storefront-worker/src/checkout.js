@@ -88,13 +88,18 @@ export async function checkoutRoute(request, env, path, { quote = calculateTotal
     if (!postcode) return json({ error: 'invalid_postal_code', message: country === 'CA' ? 'Enter a Canadian postal code in the format A1A 1A1.' : 'Please enter a postal/ZIP code.' }, 400);
     if (quantity === null) return json({ error: 'invalid_quantity', message: 'Quantity must be a whole number between 1 and 20.' }, 400);
     try {
-      const totals = await applyVoucher(env.DB, await quote(env, country, postcode, quantity), body);
-      if (!totals) return json({ error: 'invalid_voucher', message: 'That voucher is invalid, already used, or belongs to a different email.' }, 400);
+      const baseTotals = await quote(env, country, postcode, quantity);
+      const voucherTotals = await applyVoucher(env.DB, baseTotals, body);
+      // A bad optional voucher must not suppress the real shipping quote.
+      // Payment still revalidates vouchers and rejects any unquoted code.
+      const voucherInvalid = !voucherTotals && Boolean(String(body.voucher_code || '').trim());
+      const totals = voucherTotals || await applyVoucher(env.DB, baseTotals, { voucher_code: '' });
       return json({
         book_price_cents: totals.bookPriceCents, book_subtotal_cents: totals.bookSubtotalCents,
         voucher_discount_cents: totals.voucherDiscountCents,
         shipping_price_cents: totals.shippingPriceCents, total_price_cents: totals.totalPriceCents,
         currency: totals.currency, quantity: totals.quantity, shipping_upgraded: totals.shippingUpgraded,
+        voucher_invalid: voucherInvalid,
       });
     } catch (error) {
       await logError(env.DB, { service: 'worker', type: 'shipping_calculation_failed', message: error.message });

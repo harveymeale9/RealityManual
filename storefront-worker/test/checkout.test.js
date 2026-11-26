@@ -128,7 +128,27 @@ test('feedback voucher halves one book only, keeps shipping, and cannot be reuse
   assert.equal(multiPrice.total_price_cents, 18060);
   const wrongEmail = await checkoutRoute(makeRequest('/api/shipping/calculate', { country_code: 'US', postal_code: '10001', quantity: 1,
     email: 'other@example.test', voucher_code: code }), env, '/api/shipping/calculate', { quote: async () => totals });
-  assert.equal(wrongEmail.status, 400);
+  assert.equal(wrongEmail.status, 200);
+  assert.deepEqual(await wrongEmail.json(), {
+    book_price_cents: 6500, book_subtotal_cents: 6500, voucher_discount_cents: 0,
+    shipping_price_cents: 1810, total_price_cents: 8310,
+    currency: 'usd', quantity: 1, shipping_upgraded: false, voucher_invalid: true,
+  });
+  const badCode = await checkoutRoute(makeRequest('/api/shipping/calculate', { country_code: 'US', postal_code: '10001', quantity: 1,
+    email: body.email, voucher_code: 'ACCIDENTAL' }), env, '/api/shipping/calculate', { quote: async () => totals });
+  assert.equal(badCode.status, 200);
+  assert.equal((await badCode.json()).total_price_cents, 8310);
+  const noEmail = await checkoutRoute(makeRequest('/api/shipping/calculate', { country_code: 'US', postal_code: '10001', quantity: 1,
+    voucher_code: 'ACCIDENTAL' }), env, '/api/shipping/calculate', { quote: async () => totals });
+  assert.equal(noEmail.status, 200);
+  assert.equal((await noEmail.json()).voucher_invalid, true);
+  const rejectedPayment = await checkoutRoute(makeRequest('/api/checkout/create-payment-intent', { ...body,
+    voucher_code: 'ACCIDENTAL', quoted_total_price_cents: 8310 }), env, '/api/checkout/create-payment-intent', {
+    quote: async () => totals, payments: () => { throw new Error('Stripe must not be called.'); },
+  });
+  assert.equal(rejectedPayment.status, 400);
+  assert.equal((await rejectedPayment.json()).error, 'invalid_voucher');
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM orders').get().n, 0);
   const paid = await checkoutRoute(makeRequest('/api/checkout/create-payment-intent', { ...body,
     voucher_code: code, quoted_total_price_cents: 5060 }), env, '/api/checkout/create-payment-intent', {
     quote: async () => totals,
@@ -145,7 +165,8 @@ test('feedback voucher halves one book only, keeps shipping, and cannot be reuse
   assert.equal(sqlite.prepare('SELECT redeemed_order_id FROM feedback_vouchers').get().redeemed_order_id, orderId);
   const reused = await checkoutRoute(makeRequest('/api/shipping/calculate', { country_code: 'US', postal_code: '10001', quantity: 1,
     email: body.email, voucher_code: code }), env, '/api/shipping/calculate', { quote: async () => totals });
-  assert.equal(reused.status, 400);
+  assert.equal(reused.status, 200);
+  assert.equal((await reused.json()).voucher_invalid, true);
   sqlite.close();
 });
 

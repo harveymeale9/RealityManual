@@ -278,12 +278,6 @@
       trackQuoteState('needs_postcode');
       return;
     }
-    if (voucherCode && !EMAIL_REGEX.test(email)) {
-      summaryShipping.textContent = 'Enter email';
-      summaryTotal.textContent = 'Enter your email to apply the voucher';
-      return;
-    }
-
     summaryShipping.textContent = 'Calculating…';
     summaryTotal.textContent = '-';
     trackQuoteState('requested');
@@ -324,7 +318,15 @@
 
   function applyQuote(data, address) {
     currentTotalCents = data.total_price_cents;
-    lastQuote = { ...address, totalPriceCents: data.total_price_cents };
+    lastQuote = { ...address, totalPriceCents: data.total_price_cents, voucherInvalid: Boolean(data.voucher_invalid) };
+    const voucherField = form.querySelector('[data-field="voucher_code"]');
+    if (voucherField) {
+      voucherField.classList.remove('has-error');
+      voucherField.querySelector('.field-error').textContent = '';
+    }
+    if (data.voucher_invalid) {
+      setFieldError('voucher_code', 'This code was not applied. You can correct it or continue at the full price shown below.');
+    }
     summaryBookPrice.textContent = formatCents(data.book_subtotal_cents);
     voucherDiscountRow.hidden = !data.voucher_discount_cents;
     summaryVoucherDiscount.textContent = '−' + formatCents(data.voucher_discount_cents || 0);
@@ -474,6 +476,9 @@
       if (!lastShippingError) showFormError('We could not confirm the current shipping price. Please try again.', 'shipping_quote_missing');
       return;
     }
+    if (lastQuote.voucherInvalid) {
+      setFieldError('voucher_code', 'This code was not applied. You can correct it or continue at the full price shown below.');
+    }
 
     submitButton.disabled = true;
     submitButton.textContent = 'Processing…';
@@ -500,7 +505,8 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(20000),
-        body: JSON.stringify({ ...values, quoted_total_price_cents: lastQuote.totalPriceCents,
+        body: JSON.stringify({ ...values, voucher_code: lastQuote.voucherInvalid ? '' : values.voucher_code,
+          quoted_total_price_cents: lastQuote.totalPriceCents,
           attribution: RMAnalytics.getCheckoutAttribution() }),
       });
       orderResponse = await res.json();
@@ -510,7 +516,7 @@
           if (values.country_code === countrySelect.value &&
               values.postal_code.trim() === postalInput.value.trim() &&
               values.quantity === getQuantity()) {
-            applyQuote(orderResponse, {
+            applyQuote({ ...orderResponse, voucher_invalid: lastQuote.voucherInvalid }, {
               countryCode: values.country_code,
               postalCode: values.postal_code.trim(),
               quantity: values.quantity,
