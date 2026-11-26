@@ -8,25 +8,23 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   52fb8b4..c465162  main       -> origin/main
+   c465162..c7fbbd8  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 52fb8b4..c465162
+Updating c465162..c7fbbd8
 Fast-forward
- CLAUDE.md                                   |   10 +
- frontend/checkout.html                      |    2 +-
- frontend/js/checkout.js                     |   47 +-
- ops-service/.ci/last-run.log                | 3295 ++++++++++++++-------------
- ops-service/public/app.js                   |    8 +
- ops-service/public/index.html               |    2 +-
- ops-service/src/storefrontRemoteSnapshot.js |    2 +-
- ops-service/src/storefrontReporting.js      |   11 +-
- storefront-worker/src/analytics.js          |   66 +-
- storefront-worker/src/index.js              |    3 +-
- storefront-worker/src/reportSnapshot.js     |    2 +-
- storefront-worker/test/analytics.test.js    |   38 +-
- 12 files changed, 1827 insertions(+), 1659 deletions(-)
+ CLAUDE.md                                         |   12 +-
+ frontend/checkout.html                            |    2 +-
+ frontend/js/checkout.js                           |   36 +-
+ ops-service/.ci/last-run.log                      | 1729 +--------------------
+ ops-service/public/app.js                         |    7 +
+ ops-service/public/index.html                     |    2 +-
+ ops-service/src/storefrontReporting.js            |    7 +
+ ops-service/test/storefrontRemoteSnapshot.test.js |   13 +
+ storefront-worker/src/analytics.js                |   20 +-
+ storefront-worker/test/analytics.test.js          |    3 +
+ 10 files changed, 152 insertions(+), 1679 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=c46516260681882d2cb15449ec6d9ed580e8fff9
++ NEW_HEAD=c7fbbd80d1efee5fa16714f2076d86b8674e3e58
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -35,13 +33,12 @@ Already up to date.
 + chown -R 1000:1000 /srv/realitymanual-repo
 + LAST_BUILD_FILE=/root/ops-service-data/last-image-commit.txt
 ++ cat /root/ops-service-data/last-image-commit.txt
-+ LAST_BUILD_COMMIT=52fb8b426d85240d0ec8b64ce02a52ed55651949
++ LAST_BUILD_COMMIT=c46516260681882d2cb15449ec6d9ed580e8fff9
 + NEEDS_REBUILD=1
-+ '[' -n 52fb8b426d85240d0ec8b64ce02a52ed55651949 ']'
-+ git cat-file -e '52fb8b426d85240d0ec8b64ce02a52ed55651949^{commit}'
-++ git diff --name-only 52fb8b426d85240d0ec8b64ce02a52ed55651949 c46516260681882d2cb15449ec6d9ed580e8fff9 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
-+ '[' -z 'ops-service/src/storefrontRemoteSnapshot.js
-ops-service/src/storefrontReporting.js' ']'
++ '[' -n c46516260681882d2cb15449ec6d9ed580e8fff9 ']'
++ git cat-file -e 'c46516260681882d2cb15449ec6d9ed580e8fff9^{commit}'
+++ git diff --name-only c46516260681882d2cb15449ec6d9ed580e8fff9 c7fbbd80d1efee5fa16714f2076d86b8674e3e58 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
++ '[' -z ops-service/src/storefrontReporting.js ']'
 + '[' 0 = 1 ']'
 + '[' 1 = 0 ']'
 + UPLOAD_DRAIN_WAITED=0
@@ -115,10 +112,10 @@ ops-service/src/storefrontReporting.js' ']'
 #4 DONE 0.0s
 
 #5 [internal] load build context
-#5 transferring context: 488.06kB 0.0s done
+#5 transferring context: 484.35kB done
 #5 DONE 0.0s
 
-#6 [ 5/10] RUN npm install --omit=dev
+#6 [ 4/10] COPY package.json ./
 #6 CACHED
 
 #7 [ 2/10] RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip make g++ git ca-certificates openssh-client ffmpeg     && update-ca-certificates     && python3 -m pip install --break-system-packages --no-cache-dir yt-dlp==2026.8.19     && rm -rf /var/lib/apt/lists/*
@@ -127,7 +124,7 @@ ops-service/src/storefrontReporting.js' ']'
 #8 [ 3/10] WORKDIR /app
 #8 CACHED
 
-#9 [ 4/10] COPY package.json ./
+#9 [ 5/10] RUN npm install --omit=dev
 #9 CACHED
 
 #10 [ 6/10] COPY server.js ./
@@ -137,42 +134,41 @@ ops-service/src/storefrontReporting.js' ']'
 #11 DONE 0.1s
 
 #12 [ 8/10] COPY public ./public
-#12 DONE 0.2s
+#12 DONE 0.1s
 
 #13 [ 9/10] RUN mkdir -p /data /repo /home/node/.ssh && chown -R node:node /app /data /repo /home/node/.ssh && chmod 700 /home/node/.ssh
-#13 DONE 17.1s
+#13 DONE 16.9s
 
 #14 [10/10] RUN printf 'Host host.docker.internal\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n' > /home/node/.ssh/config     && chown node:node /home/node/.ssh/config && chmod 600 /home/node/.ssh/config
-#14 DONE 0.3s
+#14 DONE 0.2s
 
 #15 exporting to image
 #15 exporting layers
-#15 exporting layers 3.8s done
-#15 exporting manifest sha256:345e75073a56b3dec9a6b977abd69fd17640a99dc88b59ec1bd16077ee1f1e3c
-#15 exporting manifest sha256:345e75073a56b3dec9a6b977abd69fd17640a99dc88b59ec1bd16077ee1f1e3c 0.0s done
-#15 exporting config sha256:2e90936b55a5b6bc50e35004d1cab178860cd1697987ec20d4039b6e827e62ee 0.0s done
-#15 exporting attestation manifest sha256:1dab9f78a3a4eae7be2e98e34e4e28814024bc91a7f642e81461e9f19c9867b1 0.0s done
-#15 exporting manifest list sha256:d4ce2eaf79214be2ca552a377b3be6ad60146cad9bef7522f3cfed4fff72e48c 0.0s done
+#15 exporting layers 2.3s done
+#15 exporting manifest sha256:02026e87d56071be1a3daac7ba3b5f37c8bfc5a1981c3b01a56d7fbc0f48a6b1 0.0s done
+#15 exporting config sha256:7eed451fc23a4e40010ad4ea6ab0d8044ea22869db5c72f2ef1da92f03cd05a8 done
+#15 exporting attestation manifest sha256:015059801c46149fc18163367dea717c2605dfad96471919f70042ecf48c9815 0.0s done
+#15 exporting manifest list sha256:a11111425ae486477ed223b18bd47a0dc30a40930ff1761bc215eec9beff2440 done
 #15 naming to docker.io/library/rm-ops-service:latest done
 #15 unpacking to docker.io/library/rm-ops-service:latest
-#15 unpacking to docker.io/library/rm-ops-service:latest 1.1s done
-#15 DONE 5.1s
+#15 unpacking to docker.io/library/rm-ops-service:latest 0.8s done
+#15 DONE 3.2s
 + docker stop rm-ops-service
 rm-ops-service
 + docker rm rm-ops-service
 rm-ops-service
 + docker run -d --name rm-ops-service --restart unless-stopped -p 127.0.0.1:4001:4001 --add-host=host.docker.internal:host-gateway -v /root/ops-service-data:/data -v /root/realitymanual-backend-data:/store-data:ro -v /srv/realitymanual-repo:/repo -v /root/pm-ssh-key/pm_host_access:/home/node/.ssh/id_ed25519:ro --env-file /root/realitymanual-repo/ops-service/.env rm-ops-service
-b1fa34fbde26be8bb85e9b6d972664bc70ec6cdcc92b3c37f261551840766d4a
-+ echo c46516260681882d2cb15449ec6d9ed580e8fff9
+b9f85c7f9802825bfb4cbf86c0c00e855e1ce4bc36a8ff1959668cbd26b6c915
++ echo c7fbbd80d1efee5fa16714f2076d86b8674e3e58
 ++ git -C /root/realitymanual-repo rev-parse --short HEAD
-+ echo 'rm-ops-service redeployed at c465162'
-rm-ops-service redeployed at c465162
++ echo 'rm-ops-service redeployed at c7fbbd8'
+rm-ops-service redeployed at c7fbbd8
 + docker image prune -f
 Deleted Images:
-untagged: sha256:f19c530fd745bdcb0b4e0ff8f261ba47fa629dd1cb4096d9d78b4dc0bafa1258
-deleted: sha256:f19c530fd745bdcb0b4e0ff8f261ba47fa629dd1cb4096d9d78b4dc0bafa1258
-deleted: sha256:f3db792fb53a0347618037120b4ee051183935ac04666bd35a00b3c36ef39b3c
-deleted: sha256:cc307ce2a5091af31c461e0b2c3cf52baf60a7326e49da946d93f5b56bd7db04
+untagged: sha256:b92423b30ff8c04f75eef6ea1ed5673ff3d4cf10c67be02f21143edf40b065ca
+deleted: sha256:b92423b30ff8c04f75eef6ea1ed5673ff3d4cf10c67be02f21143edf40b065ca
+deleted: sha256:28137a155434b6f63cbc0a6d9041d3bb7aec9aac42c04b6a90840f06772f6ed5
+deleted: sha256:f51b929a009b3faba57c17671387b716b44edc0e287bfc5cf183e888bb902ff8
 
 Total reclaimed space: 15.67kB
 + docker builder prune -f --max-used-space 8GB
