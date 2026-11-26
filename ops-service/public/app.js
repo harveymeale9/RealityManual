@@ -25,19 +25,22 @@
   var MANUAL_STAGE_IDS = window.RMStore.STAGES.slice(0, UPLOADED_INDEX + 1).map(function (s) { return s.id; });
   var AUTO_STAGE_IDS = window.RMStore.STAGES.slice(UPLOADED_INDEX + 1).map(function (s) { return s.id; });
 
-  // Platform preset applied when the content-type dropdown changes in the
-  // editor, per Harvey: any shortform type defaults to YT Shorts +
-  // TikTok + Instagram + Facebook (all four — briefly dropped Facebook
-  // from this list on 2026-09-20, corrected back the same day, "fb also
-  // for shorts"), longform defaults to YT Long + Facebook. Only fires on
-  // an actual change during editing (see fieldContentType's change
-  // listener), never on populateFields() for an already-saved piece.
+  // Direct Facebook short-form posting is paused while Instagram cross-posts
+  // Reels. Preserve its wiring so the server flag can restore it later.
   var PLATFORM_PRESET_BY_TYPE = {
-    ultra_short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
-    short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
-    long_short: ['ytshort', 'tiktok', 'instagram', 'facebook'],
+    ultra_short: ['ytshort', 'tiktok', 'instagram'],
+    short: ['ytshort', 'tiktok', 'instagram'],
+    long_short: ['ytshort', 'tiktok', 'instagram'],
     longform: ['ytlong', 'facebook']
   };
+  function directFacebookShortEnabled() {
+    return !!(metaStatusCache && metaStatusCache.facebookShortformPublishingEnabled);
+  }
+  function platformPresetForType(type) {
+    var preset = (PLATFORM_PRESET_BY_TYPE[type] || []).slice();
+    if (Store.SHORT_TYPES.indexOf(type) !== -1 && directFacebookShortEnabled()) preset.push('facebook');
+    return preset;
+  }
 
   // Live across tab (re)activations so bootProjectManager can stop a prior
   // poller before starting a new one — panelMain.innerHTML gets wiped and
@@ -3182,12 +3185,13 @@
       if (activeId && pieces[activeId]) {
         pieces[activeId].contentTypeSelectionExplicit = fieldContentType.value !== '';
       }
-      var preset = PLATFORM_PRESET_BY_TYPE[fieldContentType.value] || [];
+      var preset = platformPresetForType(fieldContentType.value);
       platformGrid.querySelectorAll('.platform-toggle').forEach(function (t) {
         var checked = preset.indexOf(t.dataset.platform) !== -1;
         t.classList.toggle('checked', checked);
         t.querySelector('input').checked = checked;
       });
+      updateFacebookShortToggle();
       clearTimeout(saveTimer);
       relatedLongformField.hidden = Store.SHORT_TYPES.indexOf(fieldContentType.value) === -1;
       if (relatedLongformField.hidden) fieldRelatedLongform.value = '';
@@ -3434,7 +3438,8 @@
     var group = (settings.captions && settings.captions[groupKey]) || {};
     var platforms = p.platforms || [];
     return CAPTION_GROUPS[groupKey]
-      .filter(function (o) { return platforms.indexOf(o.key) !== -1; })
+      .filter(function (o) { return platforms.indexOf(o.key) !== -1 &&
+        !(groupKey === 'shortform' && o.key === 'facebook' && !directFacebookShortEnabled()); })
       .map(function (o) {
         var template = group[o.key] || '';
         var publishText = Store.renderPlatformCaption(template, o.key, buildUtmLink(p, settings, o.key));
@@ -3515,6 +3520,7 @@
       t.classList.toggle('checked', checked);
       t.querySelector('input').checked = checked;
     });
+    updateFacebookShortToggle();
 
     if (currentVideoObjectUrl) { URL.revokeObjectURL(currentVideoObjectUrl); currentVideoObjectUrl = null; }
 
@@ -3601,6 +3607,20 @@
     fieldYtTitle1.disabled = !editable;
     if (!editable) approveBtn.hidden = true;
     btnDelete.hidden = !editable;
+  }
+
+  function updateFacebookShortToggle() {
+    if (!platformGrid || !fieldContentType) return;
+    var toggle = platformGrid.querySelector('.platform-toggle[data-platform="facebook"]');
+    if (!toggle) return;
+    var paused = Store.SHORT_TYPES.indexOf(fieldContentType.value) !== -1 && !directFacebookShortEnabled();
+    var input = toggle.querySelector('input');
+    if (paused) {
+      input.checked = false;
+      toggle.classList.remove('checked');
+    }
+    input.disabled = paused || IS_REVIEWER;
+    toggle.title = paused ? 'Facebook Reels are being cross-posted from Instagram; direct short-form posting is paused.' : '';
   }
 
   function openPiece(id, closedCb) {
@@ -4307,8 +4327,10 @@
     }
     var wiredPlatforms = effectiveWiredPlatforms();
     var platforms = piece.platforms || [];
-    var wired = platforms.filter(function (p) { return wiredPlatforms.indexOf(p) !== -1; });
-    var unwired = platforms.filter(function (p) { return wiredPlatforms.indexOf(p) === -1; });
+    var wired = platforms.filter(function (p) { return wiredPlatforms.indexOf(p) !== -1 &&
+      !(p === 'facebook' && Store.SHORT_TYPES.indexOf(piece.contentType) !== -1 && !directFacebookShortEnabled()); });
+    var unwired = platforms.filter(function (p) { return wiredPlatforms.indexOf(p) === -1 &&
+      !(p === 'facebook' && Store.SHORT_TYPES.indexOf(piece.contentType) !== -1 && !directFacebookShortEnabled()); });
 
     var anyPending = wired.some(function (p) {
       var s = piece[publishStatusFieldFor(p)];
@@ -5399,7 +5421,11 @@
       // toggle the YouTube platforms — TikTok/Instagram/Facebook are
       // disabled outright, per Harvey's "fields not relevant to youtube
       // disabled" — and a piece it didn't create is locked entirely.
-      cb.disabled = !canEditRow || (IS_REVIEWER && pl.id !== 'ytshort' && pl.id !== 'ytlong');
+      cb.disabled = !canEditRow || (IS_REVIEWER && pl.id !== 'ytshort' && pl.id !== 'ytlong') ||
+        (pl.id === 'facebook' && Store.SHORT_TYPES.indexOf(p.contentType) !== -1 && !directFacebookShortEnabled());
+      if (pl.id === 'facebook' && Store.SHORT_TYPES.indexOf(p.contentType) !== -1 && !directFacebookShortEnabled()) {
+        toggle.title = 'Facebook Reels are being cross-posted from Instagram; direct short-form posting is paused.';
+      }
       // Real bug Harvey hit (2026-09-20): a rapid burst of toggles each
       // fired its own immediate Store.put — since the server does a full-
       // record overwrite with no merge, and JSON.stringify(body) snapshots
@@ -6318,7 +6344,7 @@
           // checked — the others are disabled in the UI anyway (see
           // buildUploadRowHead), so pre-checking them here would just be
           // a confusing default nobody can act on.
-          platforms: (PLATFORM_PRESET_BY_TYPE[detectedType] || []).slice()
+          platforms: platformPresetForType(detectedType)
             .filter(function (pl) { return !IS_REVIEWER || pl === 'ytshort' || pl === 'ytlong'; }),
           contentType: detectedType,
           contentTypeSelectionExplicit: true,
@@ -6406,14 +6432,14 @@
       '</section>' +
       '<section class="settings-section">' +
         '<h3>Publishing cadence</h3>' +
-        '<p class="settings-hint">Every short-form piece uses one shared slot across TikTok, YouTube Shorts, Instagram and Facebook. ' +
-          'TikTok remains the source of truth in Buffer; the direct platforms wait for the exact same release time. ' +
-          'Longform keeps its separate rolling YouTube/Facebook timeline.</p>' +
+        '<p class="settings-hint">YouTube Shorts and Instagram share the short-form release slots. ' +
+          'Instagram Reels currently cross-post to Facebook automatically, so direct Facebook short-form publishing is paused. ' +
+          'Longform keeps its separate YouTube/Facebook timeline.</p>' +
         '<p class="settings-hint">Approved videos wait naturally in Publishing Queue. When the next slot is available, the scheduler chooses the best short-form or long-form video using topic separation, format variety and age.</p>' +
         '<div class="tiktok-schedule-block shortform-mirror-block">' +
           '<div class="cadence-label">Shared short-form schedule</div>' +
           '<div class="shortform-schedule-summary" id="directShortScheduleSummary">Checking Buffer schedule…</div>' +
-          '<p class="settings-hint tiktok-schedule-note">YouTube Shorts, Instagram and Facebook automatically mirror the TikTok queue slot assigned by Buffer.</p>' +
+          '<p class="settings-hint tiktok-schedule-note">YouTube Shorts and Instagram release together. Facebook Reels arrive via Instagram cross-posting; TikTok and direct Facebook shorts are paused.</p>' +
         '</div>' +
         '<div class="cadence-grid" id="cadenceGrid"></div>' +
         '<div class="tiktok-schedule-block">' +
@@ -6457,7 +6483,7 @@
           '<textarea class="notes-input settings-textarea" id="caption-shortform-tiktok" placeholder="TikTok caption — no external link\n\n[DESCRIPTION]"></textarea>' +
           '<label class="field-label" style="margin-top:14px;display:block;">Instagram caption</label>' +
           '<textarea class="notes-input settings-textarea" id="caption-shortform-instagram" placeholder="Instagram caption — no external link\n\n[DESCRIPTION]"></textarea>' +
-          '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption</label>' +
+          '<label class="field-label" style="margin-top:14px;display:block;">Facebook caption (direct short-form paused)</label>' +
           '<textarea class="notes-input settings-textarea" id="caption-shortform-facebook" placeholder="Choose your Facebook caption — [LINK] is optional\n\n[DESCRIPTION]"></textarea>' +
         '</div>' +
         '<div class="caption-group-panel" data-group="longform" id="captionPanelLongform" hidden>' +

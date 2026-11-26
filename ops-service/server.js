@@ -46,6 +46,7 @@ const instagramInsightsAuth = require('./src/instagramInsightsAuth');
 const metaPublisherService = require('./src/metaPublisher');
 const facebookPublishMedia = require('./src/facebookPublishMedia');
 const facebookReplay = require('./src/facebookReplay');
+const facebookShortformPause = require('./src/facebookShortformPause');
 const shortformSchedule = require('./src/shortformSchedule');
 const topicSchedule = require('./src/topicSchedule');
 const publishPolicy = require('./src/publishPolicy');
@@ -137,9 +138,14 @@ const buffer = bufferService.setup({
 // Owner-paused while the TikTok account is deactivated. Keep Buffer credentials
 // and all publish plumbing so this can be re-enabled deliberately later.
 const TIKTOK_PUBLISHING_ENABLED = process.env.TIKTOK_PUBLISHING_ENABLED === 'true';
-const ACTIVE_SHORT_PLATFORMS = TIKTOK_PUBLISHING_ENABLED
+// Instagram Reels now cross-post to the Facebook Page. Keep the direct Meta
+// publisher connected for long-form videos and for an explicit later restart.
+const FACEBOOK_SHORTFORM_PUBLISHING_ENABLED = process.env.FACEBOOK_SHORTFORM_PUBLISHING_ENABLED === 'true';
+const ACTIVE_SHORT_PLATFORMS = (TIKTOK_PUBLISHING_ENABLED
   ? ['ytshort', 'tiktok', 'instagram', 'facebook']
-  : ['ytshort', 'instagram', 'facebook'];
+  : ['ytshort', 'instagram', 'facebook']).filter(function (platform) {
+    return FACEBOOK_SHORTFORM_PUBLISHING_ENABLED || platform !== 'facebook';
+  });
 const SHORT_POSTING_SCHEDULE = shortformSchedule.SHORTFORM_POSTING_SCHEDULE;
 const metaPublisher = metaPublisherService.setup({
   mediaBaseUrl: process.env.META_MEDIA_BASE_URL || 'https://ops.realitymanual.com'
@@ -1250,6 +1256,7 @@ app.get('/api/meta/status', requireAuth, function (req, res) {
     redirectUri: META_REDIRECT_URI,
     authorized: !!(configured && row.user_access_token),
     connected: !!(configured && row.page_access_token),
+    facebookShortformPublishingEnabled: FACEBOOK_SHORTFORM_PUBLISHING_ENABLED,
     page: row && row.page_id ? { id: row.page_id, name: row.page_name } : null,
     instagram: row && row.instagram_account_id ? { id: row.instagram_account_id, username: row.instagram_username } : null
   });
@@ -2236,6 +2243,9 @@ app.put('/api/store/:storeName/:id', function (req, res) {
         req.body.contentTypeSelectionExplicit !== true && (!existingPiece || existingWasUnselected)) {
       req.body.contentType = '';
       req.body.contentTypeSelectionExplicit = false;
+    }
+    if (facebookShortformPause.paused(req.body, FACEBOOK_SHORTFORM_PUBLISHING_ENABLED) && Array.isArray(req.body.platforms)) {
+      req.body.platforms = req.body.platforms.filter(function (platform) { return platform !== 'facebook'; });
     }
     // Filmed and Uploaded are now one planning state. Tabs left open before
     // that merge may still submit the retired stage id; normalize it at the
@@ -4024,6 +4034,18 @@ function pauseUnpublishedTiktokWork() {
   return changed;
 }
 
+function pauseUnpublishedFacebookShortWork() {
+  if (FACEBOOK_SHORTFORM_PUBLISHING_ENABLED) return 0;
+  let changed = 0;
+  for (const piece of allPieceRecords()) {
+    if (!facebookShortformPause.removeUnpublished(piece, FACEBOOK_SHORTFORM_PUBLISHING_ENABLED)) continue;
+    piece.updatedAt = new Date().toISOString();
+    savePieceRecord(piece);
+    changed++;
+  }
+  return changed;
+}
+
 // This is deliberately separate from the normal publishing queue: a replay
 // must never touch another platform or move a Live Kanban card backwards.
 let facebookReplayInFlight = false;
@@ -4060,6 +4082,7 @@ async function seedFacebookReplay() {
   (async function () {
     for (const entry of entries) {
       const piece = getPieceRecord(entry.pieceId);
+      if (facebookShortformPause.paused(piece, FACEBOOK_SHORTFORM_PUBLISHING_ENABLED)) continue;
       if (!piece || (piece.socialDescriptionText && piece.socialDescriptionSourceHash === socialDescription.sourceHash(piece))) continue;
       try { await ensureSocialDescription(entry.pieceId); }
       catch (error) { console.warn('Facebook replay summary preparation failed for ' + entry.pieceId + ':', error.message); }
@@ -4098,7 +4121,12 @@ async function advanceFacebookReplay() {
     if (!slot || db.prepare('SELECT 1 FROM facebook_replay_jobs WHERE slot_date=?').get(slot)) return;
     const published = await metaPublisher.listFacebookPublishedVideoIds({ pageId: auth.page_id, pageToken: auth.page_access_token });
     const jobs = db.prepare('SELECT * FROM facebook_replay_jobs ORDER BY rowid').all();
-    const job = facebookReplay.eligibleJob(jobs, published);
+    // Keep the long-form replay path; skip only short-form catalog videos
+    // while Instagram's own Facebook cross-posting is under comparison.
+    const eligibleJobs = jobs.filter(function (candidate) {
+      return !facebookShortformPause.paused(getPieceRecord(candidate.piece_id), FACEBOOK_SHORTFORM_PUBLISHING_ENABLED);
+    });
+    const job = facebookReplay.eligibleJob(eligibleJobs, published);
     if (!job) return;
     const piece = getPieceRecord(job.piece_id);
     if (!piece || piece.facebookVideoId !== job.old_video_id) throw new Error('Facebook replay piece changed before release.');
@@ -4486,6 +4514,14 @@ function schedulePublishingQueueDrain() {
 
 async function runPlatformPublishBatch(id, destinations, options) {
   options = options || {};
+  if (!FACEBOOK_SHORTFORM_PUBLISHING_ENABLED) {
+    pauseUnpublishedFacebookShortWork();
+    const piece = getPieceRecord(id);
+    destinations = destinations.filter(function (destination) {
+      return facebookShortformPause.allowed(piece, destination, FACEBOOK_SHORTFORM_PUBLISHING_ENABLED);
+    });
+    if (!destinations.length) return;
+  }
   if (!TIKTOK_PUBLISHING_ENABLED) {
     pauseUnpublishedTiktokWork();
     destinations = destinations.filter(function (destination) { return destination.platform !== 'tiktok'; });
@@ -4906,6 +4942,7 @@ app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
   }).filter(function (destination) {
     return PUBLISH_PLATFORMS.includes(destination.platform) && selected.includes(destination.platform) &&
       (TIKTOK_PUBLISHING_ENABLED || destination.platform !== 'tiktok') &&
+      facebookShortformPause.allowed(piece, destination, FACEBOOK_SHORTFORM_PUBLISHING_ENABLED) &&
       (req.sessionRole !== 'youtube-reviewer' || destination.platform === 'ytlong' || destination.platform === 'ytshort');
   });
   destinations = uniquePublishDestinations(destinations).filter(function (destination) {
@@ -4925,7 +4962,8 @@ app.post('/api/publish/:id', requireAuthOrReviewer, async function (req, res) {
   }
 
   piece.publishBatchPlatforms = uniquePublishDestinations(selected.filter(function (platform) {
-    return PUBLISH_PLATFORMS.includes(platform) && (TIKTOK_PUBLISHING_ENABLED || platform !== 'tiktok');
+    return PUBLISH_PLATFORMS.includes(platform) && (TIKTOK_PUBLISHING_ENABLED || platform !== 'tiktok') &&
+      facebookShortformPause.allowed(piece, { platform: platform }, FACEBOOK_SHORTFORM_PUBLISHING_ENABLED);
   }).map(function (platform) { return { platform: platform }; })).map(function (d) { return d.platform; });
   piece.publishBatchDestinations = destinations;
   const reviewerPublish = req.sessionRole === 'youtube-reviewer';
@@ -5883,6 +5921,8 @@ const httpServer = app.listen(PORT, function () {
   console.log('rm-ops-service listening on ' + PORT);
   const pausedTiktokPieces = pauseUnpublishedTiktokWork();
   if (pausedTiktokPieces) console.log('TikTok owner pause: removed unpublished destinations from ' + pausedTiktokPieces + ' piece(s)');
+  const pausedFacebookPieces = pauseUnpublishedFacebookShortWork();
+  if (pausedFacebookPieces) console.log('Facebook short-form pause: removed unpublished destinations from ' + pausedFacebookPieces + ' piece(s)');
   seedFacebookReplay().then(advanceFacebookReplay)
     .catch(function (error) { console.error('Facebook replay startup paused:', error.message); });
   const facebookReplayTimer = setInterval(function () {
