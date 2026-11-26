@@ -6,12 +6,14 @@ const CHECKOUT_ERROR_CODES = new Set([
   'checkout_server_error', 'checkout_unavailable', 'payment_config_error',
   'payment_element_timeout', 'payment_element_error', 'payment_declined', 'payment_uncertain',
 ]);
+const QUOTE_STATE_CODES = new Set(['needs_postcode', 'requested', 'stale_retry', 'applied', 'failed']);
 const ALERT_CODES = ['shipping_quote_failed', 'shipping_quote_missing', 'checkout_server_error', 'payment_config_error', 'payment_uncertain'];
 const EVENTS = new Set([
   'human_verified', 'page_view', 'utm_landing', 'landing_page_view', 'purchase_cta_clicked',
   'checkout_cta_header_clicked', 'checkout_cta_primary_clicked', 'checkout_cta_final_clicked',
   'checkout_arrival_header', 'checkout_arrival_primary', 'checkout_arrival_final',
-  'checkout_view', 'checkout_started', 'checkout_form_error', 'payment_submitted', 'order_complete', 'order_failed',
+  'checkout_view', 'checkout_started', 'checkout_form_error', 'checkout_quote_state',
+  'payment_submitted', 'order_complete', 'order_failed',
 ]);
 const FUNNEL = [
   'page_view', 'landing_page_view', 'purchase_cta_clicked', 'checkout_cta_header_clicked',
@@ -45,6 +47,10 @@ export async function recordEvent(request, env) {
         (!CHECKOUT_ERROR_CODES.has(body.error_code) || body.page !== '/checkout.html')) {
       return response({ error: 'invalid_checkout_error' }, 400);
     }
+    if (body.event_name === 'checkout_quote_state' &&
+        (!QUOTE_STATE_CODES.has(body.error_code) || body.page !== '/checkout.html')) {
+      return response({ error: 'invalid_quote_state' }, 400);
+    }
     if (!verified(request, body, env)) return new Response(null, { status: 204 });
     await env.DB.prepare(`INSERT INTO analytics_events (
       id,session_id,event_name,page,order_id,referrer,utm_source,utm_medium,
@@ -53,11 +59,11 @@ export async function recordEvent(request, env) {
       crypto.randomUUID(), clip(body.session_id), body.event_name, clip(body.page), null,
       clip(body.referrer), clip(body.utm_source), clip(body.utm_medium), clip(body.utm_campaign),
       clip(body.utm_term), clip(body.utm_content),
-      body.event_name === 'checkout_form_error'
+      ['checkout_form_error', 'checkout_quote_state'].includes(body.event_name)
         ? (/^[A-Z]{2}$/.test(body.country || '') ? body.country : null)
         : clip(body.country),
       1, clip(body.human_verification),
-      body.event_name === 'checkout_form_error' ? body.error_code : 'verified',
+      ['checkout_form_error', 'checkout_quote_state'].includes(body.event_name) ? body.error_code : 'verified',
     ).run();
   } catch { /* Analytics may never interrupt checkout. */ }
   return new Response(null, { status: 204 });
@@ -97,6 +103,11 @@ export async function getSummary(env, now = new Date()) {
     WHERE event_name = 'checkout_form_error' AND verified_human = 1 AND created_at >= ?
     GROUP BY classification_reason,country ORDER BY count DESC`)
     .bind(new Date(now.getTime() - 86400000).toISOString()).all();
+  const quoteStates = await env.DB.prepare(`SELECT classification_reason AS state,country,COUNT(*) AS count,
+    COUNT(DISTINCT session_id) AS shoppers FROM analytics_events
+    WHERE event_name = 'checkout_quote_state' AND verified_human = 1 AND created_at >= ?
+    GROUP BY classification_reason,country ORDER BY count DESC`)
+    .bind(new Date(now.getTime() - 86400000).toISOString()).all();
   const last30 = mergeCounts([...(recentRows.results || []), ...(dailyRows.results || [])]);
   const sourceTotals = new Map();
   for (const row of [...(sources.results || []), ...(dailySources.results || [])]) {
@@ -107,6 +118,7 @@ export async function getSummary(env, now = new Date()) {
     last_30_days: { page_views: last30.page_view?.count || 0, unique_visitors: last30.page_view?.unique_sessions || 0 },
     funnel: FUNNEL.map((step) => ({ step, count: last30[step]?.count || 0, unique_sessions: last30[step]?.unique_sessions || 0 })),
     checkout_errors_24h: checkoutErrors.results || [],
+    checkout_quote_states_24h: quoteStates.results || [],
     top_utm_sources: [...sourceTotals].map(([source, sessions]) => ({ source, sessions })).sort((a, b) => b.sessions - a.sessions).slice(0, 10),
     excluded_unverified_events: 0,
     visitor_definition: 'A verified browser visit after real interaction or seven visible seconds. Individual event rows are reduced to anonymous daily totals; different browsers or days may represent the same person.',

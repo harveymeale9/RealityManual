@@ -292,6 +292,12 @@ function getWebsiteAnalyticsSummary(db, nowValue) {
     FROM analytics_events WHERE verified_human=1 AND event_name='checkout_form_error'
       AND created_at >= ? GROUP BY 1,2 ORDER BY count DESC`)
     .all(new Date(new Date(nowValue || Date.now()).getTime() - 86400000).toISOString());
+  const quoteStates = db.prepare(`SELECT ${checkoutEventColumns.has('classification_reason') ? 'classification_reason' : "'unknown'"} AS state,
+    ${checkoutEventColumns.has('country') ? 'country' : 'NULL'} AS country,
+    COUNT(*) AS count,COUNT(DISTINCT session_id) AS shoppers
+    FROM analytics_events WHERE verified_human=1 AND event_name='checkout_quote_state'
+      AND created_at >= ? GROUP BY 1,2 ORDER BY count DESC`)
+    .all(new Date(new Date(nowValue || Date.now()).getTime() - 86400000).toISOString());
   return {
     excluded_before: WEBSITE_ANALYTICS_START_DAY,
     today: {
@@ -306,6 +312,7 @@ function getWebsiteAnalyticsSummary(db, nowValue) {
       return { step: step, count: events[step]?.count || 0, unique_sessions: events[step]?.unique_sessions || 0 };
     }),
     checkout_errors_24h: checkoutErrors,
+    checkout_quote_states_24h: quoteStates,
     top_utm_sources: [...sources.entries()].map(function ([source, sessions]) {
       return { source: source, sessions: sessions };
     }).sort(function (a, b) { return b.sessions - a.sessions; }).slice(0, 10),

@@ -66,10 +66,13 @@ test('checkout form errors retain only a safe code/country and trigger a dedupli
   });
   assert.equal((await recordEvent(request(event), env)).status, 204);
   assert.equal((await recordEvent(request({ ...event, error_code: 'arbitrary private text' }), env)).status, 400);
+  assert.equal((await recordEvent(request({ ...event, event_name: 'checkout_quote_state', error_code: 'stale_retry' }), env)).status, 204);
+  assert.equal((await recordEvent(request({ ...event, event_name: 'checkout_quote_state', error_code: 'raw_postcode_2000' }), env)).status, 400);
   const stored = sqlite.prepare("SELECT event_name,country,classification_reason FROM analytics_events").get();
   assert.deepEqual({ ...stored }, { event_name: 'checkout_form_error', country: 'AU', classification_reason: 'shipping_quote_missing' });
   const summary = await (await getSummary(env)).json();
   assert.equal(summary.checkout_errors_24h[0].count, 1);
+  assert.equal(summary.checkout_quote_states_24h[0].state, 'stale_retry');
   env.RESEND_API_KEY = 'test-key';
   env.RESEND_FROM_EMAIL = 'orders@example.test';
   const originalFetch = globalThis.fetch;

@@ -1133,6 +1133,10 @@
           return '<div class="funnel-row"><span class="funnel-step">' + escapeHtml(String(row.code || 'unknown').replace(/_/g, ' ')) +
             ' · ' + escapeHtml(row.country || 'unknown country') + '</span><span class="funnel-count">' + Number(row.count || 0) + '</span></div>';
         }).join('');
+        var quoteStateRows = (data.checkout_quote_states_24h || []).map(function (row) {
+          return '<div class="funnel-row"><span class="funnel-step">' + escapeHtml(String(row.state || 'unknown').replace(/_/g, ' ')) +
+            ' · ' + escapeHtml(row.country || 'unknown country') + '</span><span class="funnel-count">' + Number(row.count || 0) + '</span></div>';
+        }).join('');
 
         panelMain.innerHTML =
           '<div class="ops-panel">' +
@@ -1148,6 +1152,9 @@
             '<div class="funnel-section"><div class="eyebrow">Checkout errors · last 24 hours</div>' +
               (checkoutErrorRows ? '<div class="funnel-list">' + checkoutErrorRows + '</div>' : '<p class="analytics-definition">No tracked form errors.</p>') +
               '<p class="analytics-definition">Only error categories and country are recorded; no customer details or entered field values.</p></div>' +
+            '<div class="funnel-section"><div class="eyebrow">Shipping quote states · last 24 hours</div>' +
+              (quoteStateRows ? '<div class="funnel-list">' + quoteStateRows + '</div>' : '<p class="analytics-definition">No quote activity recorded yet.</p>') +
+              '<p class="analytics-definition">This shows requests, applied prices and retries when mobile autofill changes the address mid-quote.</p></div>' +
             youtubeClickthroughHtml(youtubeClickthrough) +
             websiteTrafficHtml(traffic) +
             '<div class="funnel-section"><div class="eyebrow">What is counted</div>' +

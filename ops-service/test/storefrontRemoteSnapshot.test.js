@@ -34,6 +34,19 @@ test('PII-free in-memory Worker snapshot supports existing sales and website rep
   } finally { db.close(); }
 });
 
+test('website analytics exposes only safe mobile quote-state categories', () => {
+  const data = snapshot();
+  data.tables.analytics_events.push({ id: 'quote-1', session_id: 'synthetic-browser',
+    event_name: 'checkout_quote_state', page: '/checkout.html', country: 'AU',
+    verified_human: 1, classification_reason: 'stale_retry', created_at: new Date().toISOString() });
+  const db = buildDatabase(data);
+  try {
+    const states = reporting.getWebsiteAnalyticsSummary(db).checkout_quote_states_24h;
+    assert.equal(states.length, 1);
+    assert.deepEqual(states[0], { state: 'stale_retry', country: 'AU', count: 1, shoppers: 1 });
+  } finally { db.close(); }
+});
+
 test('remote report source fails closed when its snapshot is unavailable or stale', async () => {
   const source = setup({ url: 'https://example.test/report', accessToken: 'test-token', fetchImpl: async () => Response.json(snapshot()) });
   assert.throws(() => source.getDb(), /unavailable or stale/);

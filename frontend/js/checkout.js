@@ -170,6 +170,13 @@
       clearTimeout(postalDebounceTimer);
       postalDebounceTimer = setTimeout(updateShipping, 500);
     });
+    postalInput.addEventListener('change', () => {
+      // Some mobile autofill paths emit change/blur but not input.
+      if (lastQuote?.postalCode === postalInput.value.trim() &&
+          lastQuote.countryCode === countrySelect.value) return;
+      clearTimeout(postalDebounceTimer);
+      updateShipping();
+    });
     postalInput.addEventListener('blur', () => {
       if (countrySelect.value !== 'CA') return;
       const formatted = canadianPostalCode(postalInput.value);
@@ -236,6 +243,13 @@
     updateShipping();
   }
 
+  function trackQuoteState(code) {
+    RMAnalytics.track('checkout_quote_state', {
+      country: /^[A-Z]{2}$/.test(countrySelect.value) ? countrySelect.value : '',
+      error_code: code,
+    });
+  }
+
   async function updateShipping() {
     const requestId = ++shippingRequestSeq;
     lastQuote = null;
@@ -247,9 +261,21 @@
     const quantity = getQuantity();
     const email = form.email.value.trim();
     const voucherCode = voucherInput.value.trim().toUpperCase();
+    const inputsChanged = () => countryCode !== countrySelect.value ||
+      postalCode !== postalInput.value.trim() || quantity !== getQuantity() ||
+      (voucherCode && email !== form.email.value.trim()) ||
+      voucherCode !== voucherInput.value.trim().toUpperCase();
+    const retryChangedQuote = () => {
+      // Mobile autofill may change fields without dispatching `input`.
+      trackQuoteState('stale_retry');
+      summaryShipping.textContent = 'Updating…';
+      clearTimeout(postalDebounceTimer);
+      postalDebounceTimer = setTimeout(updateShipping, 300);
+    };
     if (!countryCode || !postalCode) {
       summaryShipping.textContent = 'Enter address';
       summaryTotal.textContent = '-';
+      trackQuoteState('needs_postcode');
       return;
     }
     if (voucherCode && !EMAIL_REGEX.test(email)) {
@@ -260,6 +286,7 @@
 
     summaryShipping.textContent = 'Calculating…';
     summaryTotal.textContent = '-';
+    trackQuoteState('requested');
 
     let quoteStatus = null;
     try {
@@ -276,15 +303,16 @@
 
       // A slower request that resolves after a newer one has already
       // landed would otherwise clobber it with stale numbers.
-      if (requestId !== shippingRequestSeq || countryCode !== countrySelect.value ||
-          postalCode !== postalInput.value.trim() || quantity !== getQuantity() ||
-          (voucherCode && email !== form.email.value.trim()) ||
-          voucherCode !== voucherInput.value.trim().toUpperCase()) return;
+      if (requestId !== shippingRequestSeq) return;
+      if (inputsChanged()) return retryChangedQuote();
       applyQuote(data, { countryCode, postalCode, quantity, email, voucherCode });
+      trackQuoteState('applied');
       clearFormError();
     } catch (err) {
       if (requestId !== shippingRequestSeq) return;
+      if (inputsChanged()) return retryChangedQuote();
       lastShippingError = true;
+      trackQuoteState('failed');
       summaryShipping.textContent = 'Unavailable';
       summaryTotal.textContent = '-';
       quantityWarningBanner.hidden = true;
