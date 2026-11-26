@@ -1110,6 +1110,7 @@
           checkout_arrival_final: 'Checkout reached from final CTA',
           checkout_view: 'Checkout page viewed',
           checkout_started: 'Checkout form engaged',
+          checkout_form_error: 'Checkout form errors shown',
           payment_submitted: 'Pay clicked (not necessarily paid)',
           order_complete: 'Thank-you page tracked (not all sales)',
           order_refunded: 'Order refunded',
@@ -1128,6 +1129,10 @@
           return '<div class="funnel-row"><span class="funnel-step">' + escapeHtml(funnelLabels[f.step] || f.step.replace(/_/g, ' ')) + '</span>' +
             '<span class="funnel-count">' + f.count + '</span></div>';
         }).join('');
+        var checkoutErrorRows = (data.checkout_errors_24h || []).map(function (row) {
+          return '<div class="funnel-row"><span class="funnel-step">' + escapeHtml(String(row.code || 'unknown').replace(/_/g, ' ')) +
+            ' · ' + escapeHtml(row.country || 'unknown country') + '</span><span class="funnel-count">' + Number(row.count || 0) + '</span></div>';
+        }).join('');
 
         panelMain.innerHTML =
           '<div class="ops-panel">' +
@@ -1140,6 +1145,9 @@
                 '<div class="overview-tile-sub">' + data.last_30_days.unique_visitors + ' verified daily visits</div></div>' +
             '</div>' +
             websiteHealthHtml(health) +
+            '<div class="funnel-section"><div class="eyebrow">Checkout errors · last 24 hours</div>' +
+              (checkoutErrorRows ? '<div class="funnel-list">' + checkoutErrorRows + '</div>' : '<p class="analytics-definition">No tracked form errors.</p>') +
+              '<p class="analytics-definition">Only error categories and country are recorded; no customer details or entered field values.</p></div>' +
             youtubeClickthroughHtml(youtubeClickthrough) +
             websiteTrafficHtml(traffic) +
             '<div class="funnel-section"><div class="eyebrow">What is counted</div>' +

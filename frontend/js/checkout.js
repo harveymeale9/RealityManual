@@ -24,6 +24,8 @@
 
   const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   form.email.addEventListener('input', () => {
+    // Email only affects pricing when a voucher is present. Without one,
+    // changing/autofilling email must not invalidate a valid shipping quote.
     if (voucherInput.value.trim()) { lastQuote = null; clearTimeout(postalDebounceTimer); postalDebounceTimer = setTimeout(updateShipping, 500); }
   });
   const PHONE_REGEX = /^\+?[\d\s\-.()/]{6,35}$/;
@@ -54,6 +56,7 @@
   let stripe = null;
   let elements = null;
   let checkoutPaused = false;
+  let lastShippingError = false;
 
   const ctaSource = new URLSearchParams(window.location.search).get('cta_source') || '';
   const checkoutArrivalEvent = {
@@ -90,7 +93,7 @@
       if (!availability.ok) throw new Error('checkout_availability_unavailable');
       checkoutPaused = !(await availability.json()).available;
       if (checkoutPaused) {
-        showFormError('Orders are temporarily unavailable while we resolve a printer issue. No payment has been taken. Please check back later.');
+        showFormError('Orders are temporarily unavailable while we resolve a printer issue. No payment has been taken. Please check back later.', 'checkout_unavailable');
         submitButton.disabled = true;
         return;
       }
@@ -132,7 +135,7 @@
         submitButton.disabled = checkoutPaused;
       });
     } catch (err) {
-      showFormError('Secure payment options could not be loaded. Please refresh the page and try again.');
+      showFormError('Secure payment options could not be loaded. Please refresh the page and try again.', 'payment_config_error');
     }
   }
 
@@ -236,6 +239,7 @@
   async function updateShipping() {
     const requestId = ++shippingRequestSeq;
     lastQuote = null;
+    lastShippingError = false;
     shippingOriginNote.hidden = true;
     voucherDiscountRow.hidden = true;
     const countryCode = countrySelect.value;
@@ -257,13 +261,16 @@
     summaryShipping.textContent = 'Calculating…';
     summaryTotal.textContent = '-';
 
+    let quoteStatus = null;
     try {
       const res = await fetch(`${API_BASE_URL}/api/shipping/calculate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(20000),
         body: JSON.stringify({ country_code: countryCode, postal_code: postalCode, quantity,
           email, voucher_code: voucherCode }),
       });
+      quoteStatus = res.status;
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'We could not calculate shipping for that address.');
 
@@ -271,16 +278,19 @@
       // landed would otherwise clobber it with stale numbers.
       if (requestId !== shippingRequestSeq || countryCode !== countrySelect.value ||
           postalCode !== postalInput.value.trim() || quantity !== getQuantity() ||
-          email !== form.email.value.trim() || voucherCode !== voucherInput.value.trim().toUpperCase()) return;
+          (voucherCode && email !== form.email.value.trim()) ||
+          voucherCode !== voucherInput.value.trim().toUpperCase()) return;
       applyQuote(data, { countryCode, postalCode, quantity, email, voucherCode });
       clearFormError();
     } catch (err) {
       if (requestId !== shippingRequestSeq) return;
+      lastShippingError = true;
       summaryShipping.textContent = 'Unavailable';
       summaryTotal.textContent = '-';
       quantityWarningBanner.hidden = true;
       voucherDiscountRow.hidden = true;
-      showFormError(err.message || 'We could not calculate shipping for that address. Please check the country and postal code.');
+      showFormError(err.message || 'We could not calculate shipping for that address. Please check the country and postal code.',
+        quoteStatus && quoteStatus < 500 ? 'shipping_quote_rejected' : 'shipping_quote_failed');
     }
   }
 
@@ -308,7 +318,7 @@
     return lastQuote && lastQuote.countryCode === values.country_code &&
       lastQuote.postalCode === values.postal_code.trim() &&
       lastQuote.quantity === values.quantity &&
-      lastQuote.email === values.email.trim() &&
+      (!values.voucher_code || lastQuote.email === values.email.trim()) &&
       lastQuote.voucherCode === values.voucher_code;
   }
 
@@ -316,13 +326,19 @@
     return `$${(cents / 100).toFixed(2)}`;
   }
 
-  function showFormError(message) {
+  function showFormError(message, code) {
     errorBanner.textContent = message;
     errorBanner.classList.add('visible');
+    // Never send names, emails, phone numbers, addresses, postcodes, voucher
+    // codes, or provider-supplied error text to form telemetry.
+    if (code) RMAnalytics.track('checkout_form_error', {
+      country: /^[A-Z]{2}$/.test(countrySelect.value) ? countrySelect.value : '',
+      error_code: code,
+    });
   }
 
   function showPaymentUncertain(confirmationUrl) {
-    showFormError('We cannot confirm your payment yet. Please do not pay again. Check your order status here, and watch your email for an update.');
+    showFormError('We cannot confirm your payment yet. Please do not pay again. Check your order status here, and watch your email for an update.', 'payment_uncertain');
     const link = document.createElement('a');
     link.href = confirmationUrl;
     link.textContent = 'Check order status';
@@ -421,13 +437,13 @@
     const clientErrors = validateClientSide(values);
     if (Object.keys(clientErrors).length > 0) {
       Object.entries(clientErrors).forEach(([field, message]) => setFieldError(field, message));
-      showFormError('Please correct the highlighted fields.');
+      showFormError('Please correct the highlighted fields.', 'field_validation');
       return;
     }
 
     if (!quoteMatches(values)) await updateShipping();
     if (!quoteMatches(values)) {
-      showFormError('Please wait for the current shipping price before paying.');
+      if (!lastShippingError) showFormError('We could not confirm the current shipping price. Please try again.', 'shipping_quote_missing');
       return;
     }
 
@@ -438,13 +454,13 @@
     try {
       ({ error: submitError } = await withTimeout(elements.submit(), 30000));
     } catch {
-      showFormError('Secure payment did not respond. No payment has been started. Please refresh this page and try again.');
+      showFormError('Secure payment did not respond. No payment has been started. Please refresh this page and try again.', 'payment_element_timeout');
       submitButton.disabled = false;
       submitButton.textContent = `Pay ${formatCents(currentTotalCents)}`;
       return;
     }
     if (submitError) {
-      showFormError(submitError.message || 'Please check your payment details.');
+      showFormError(submitError.message || 'Please check your payment details.', 'payment_element_error');
       submitButton.disabled = false;
       submitButton.textContent = `Pay ${formatCents(currentTotalCents)}`;
       return;
@@ -479,19 +495,20 @@
         if (orderResponse.fields) {
           Object.entries(orderResponse.fields).forEach(([field, message]) => setFieldError(field, message));
         }
-        showFormError(orderResponse.message || 'We could not process your order. Please review your details.');
+        showFormError(orderResponse.message || 'We could not process your order. Please review your details.',
+          res.status === 409 ? 'checkout_quote_changed' : res.status >= 500 ? 'checkout_server_error' : 'checkout_rejected');
         submitButton.disabled = false;
         submitButton.textContent = `Pay ${formatCents(currentTotalCents)}`;
         return;
       }
       if (orderResponse.total_price_cents !== currentTotalCents || !quoteMatches(values)) {
-        showFormError('Your shipping details changed during checkout. Please review the total and try again.');
+        showFormError('Your shipping details changed during checkout. Please review the total and try again.', 'checkout_quote_changed');
         submitButton.disabled = false;
         submitButton.textContent = `Pay ${formatCents(currentTotalCents)}`;
         return;
       }
     } catch (err) {
-      showFormError('We could not reach the server. Please check your connection and try again.');
+      showFormError('We could not reach the server. Please check your connection and try again.', 'checkout_server_error');
       submitButton.disabled = false;
       submitButton.textContent = `Pay ${formatCents(currentTotalCents)}`;
       return;
@@ -521,7 +538,7 @@
         showPaymentUncertain(confirmationUrl);
         return;
       }
-      showFormError(confirmError.message || 'Your payment could not be completed. Please try again.');
+      showFormError(confirmError.message || 'Your payment could not be completed. Please try again.', 'payment_declined');
       submitButton.disabled = false;
       submitButton.textContent = `Pay ${formatCents(currentTotalCents)}`;
     }

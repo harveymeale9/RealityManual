@@ -19,7 +19,7 @@ const TABLES = {
     confirmation_email_sent_at,shipping_email_sent_at,refund_email_sent_at,
     resend_contact_synced_at,order_status,created_at,updated_at FROM orders`,
   analytics_events: `SELECT id,session_id,event_name,page,utm_source,utm_medium,utm_campaign,
-    utm_term,utm_content,country,verified_human,created_at FROM analytics_events`,
+    utm_term,utm_content,country,verified_human,classification_reason,created_at FROM analytics_events`,
   analytics_daily_events: 'SELECT day,event_name,event_count,verified_visits FROM analytics_daily_events',
   analytics_daily_utm_sources: 'SELECT day,utm_source,verified_visits FROM analytics_daily_utm_sources',
   analytics_daily_utm_landings: `SELECT day,utm_source,utm_medium,utm_campaign,utm_content,

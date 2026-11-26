@@ -4,7 +4,7 @@ const FUNNEL_STEPS = [
   'page_view', 'landing_page_view', 'purchase_cta_clicked',
   'checkout_cta_header_clicked', 'checkout_cta_primary_clicked', 'checkout_cta_final_clicked',
   'checkout_arrival_header', 'checkout_arrival_primary', 'checkout_arrival_final', 'checkout_view',
-  'checkout_started', 'payment_submitted', 'order_complete', 'order_failed'
+  'checkout_started', 'checkout_form_error', 'payment_submitted', 'order_complete', 'order_failed'
 ];
 
 // Harvey's own pre-launch browsing through 13 October is excluded from the
@@ -284,6 +284,14 @@ function getWebsiteAnalyticsSummary(db, nowValue) {
     });
   const excluded = db.prepare(`SELECT COUNT(*) AS count FROM analytics_events
     WHERE verified_human = 0 AND created_at >= ?`).get(thirtyStart.toISOString());
+  const checkoutEventColumns = new Set(db.prepare("PRAGMA table_info(analytics_events)").all()
+    .map(function (column) { return column.name; }));
+  const checkoutErrors = db.prepare(`SELECT ${checkoutEventColumns.has('classification_reason') ? 'classification_reason' : "'unknown'"} AS code,
+    ${checkoutEventColumns.has('country') ? 'country' : 'NULL'} AS country,
+    COUNT(*) AS count,COUNT(DISTINCT session_id) AS shoppers
+    FROM analytics_events WHERE verified_human=1 AND event_name='checkout_form_error'
+      AND created_at >= ? GROUP BY 1,2 ORDER BY count DESC`)
+    .all(new Date(new Date(nowValue || Date.now()).getTime() - 86400000).toISOString());
   return {
     excluded_before: WEBSITE_ANALYTICS_START_DAY,
     today: {
@@ -297,6 +305,7 @@ function getWebsiteAnalyticsSummary(db, nowValue) {
     funnel: FUNNEL_STEPS.map(function (step) {
       return { step: step, count: events[step]?.count || 0, unique_sessions: events[step]?.unique_sessions || 0 };
     }),
+    checkout_errors_24h: checkoutErrors,
     top_utm_sources: [...sources.entries()].map(function ([source, sessions]) {
       return { source: source, sessions: sessions };
     }).sort(function (a, b) { return b.sessions - a.sessions; }).slice(0, 10),

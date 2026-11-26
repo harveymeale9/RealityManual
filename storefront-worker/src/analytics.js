@@ -1,14 +1,23 @@
+import { sendEmail } from './mail.js';
+
+const CHECKOUT_ERROR_CODES = new Set([
+  'field_validation', 'shipping_quote_rejected', 'shipping_quote_failed',
+  'shipping_quote_missing', 'checkout_quote_changed', 'checkout_rejected',
+  'checkout_server_error', 'checkout_unavailable', 'payment_config_error',
+  'payment_element_timeout', 'payment_element_error', 'payment_declined', 'payment_uncertain',
+]);
+const ALERT_CODES = ['shipping_quote_failed', 'shipping_quote_missing', 'checkout_server_error', 'payment_config_error', 'payment_uncertain'];
 const EVENTS = new Set([
   'human_verified', 'page_view', 'utm_landing', 'landing_page_view', 'purchase_cta_clicked',
   'checkout_cta_header_clicked', 'checkout_cta_primary_clicked', 'checkout_cta_final_clicked',
   'checkout_arrival_header', 'checkout_arrival_primary', 'checkout_arrival_final',
-  'checkout_view', 'checkout_started', 'payment_submitted', 'order_complete', 'order_failed',
+  'checkout_view', 'checkout_started', 'checkout_form_error', 'payment_submitted', 'order_complete', 'order_failed',
 ]);
 const FUNNEL = [
   'page_view', 'landing_page_view', 'purchase_cta_clicked', 'checkout_cta_header_clicked',
   'checkout_cta_primary_clicked', 'checkout_cta_final_clicked', 'checkout_arrival_header',
   'checkout_arrival_primary', 'checkout_arrival_final', 'checkout_view', 'checkout_started',
-  'payment_submitted', 'order_complete', 'order_failed',
+  'checkout_form_error', 'payment_submitted', 'order_complete', 'order_failed',
 ];
 const BOT = /bot|crawler|spider|headless|phantom|selenium|playwright|puppeteer|curl|wget|python-requests|httpclient|facebookexternalhit|meta-externalagent|googleother|bingpreview|bytespider|claudebot|anthropic-ai|gptbot|chatgpt-user|perplexitybot/i;
 const BROWSER = /mozilla|chrome|chromium|safari|firefox|edg\//i;
@@ -32,6 +41,10 @@ export async function recordEvent(request, env) {
     const body = JSON.parse(raw);
     if (!body?.event_name || !body?.session_id) return response({ error: 'missing_fields' }, 400);
     if (!EVENTS.has(body.event_name)) return response({ error: 'unsupported_event' }, 400);
+    if (body.event_name === 'checkout_form_error' &&
+        (!CHECKOUT_ERROR_CODES.has(body.error_code) || body.page !== '/checkout.html')) {
+      return response({ error: 'invalid_checkout_error' }, 400);
+    }
     if (!verified(request, body, env)) return new Response(null, { status: 204 });
     await env.DB.prepare(`INSERT INTO analytics_events (
       id,session_id,event_name,page,order_id,referrer,utm_source,utm_medium,
@@ -39,8 +52,10 @@ export async function recordEvent(request, env) {
     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
       crypto.randomUUID(), clip(body.session_id), body.event_name, clip(body.page), null,
       clip(body.referrer), clip(body.utm_source), clip(body.utm_medium), clip(body.utm_campaign),
-      clip(body.utm_term), clip(body.utm_content), clip(body.country), 1,
-      clip(body.human_verification), 'verified',
+      clip(body.utm_term), clip(body.utm_content),
+      body.event_name === 'checkout_form_error' && /^[A-Z]{2}$/.test(body.country || '') ? body.country : null,
+      1, clip(body.human_verification),
+      body.event_name === 'checkout_form_error' ? body.error_code : 'verified',
     ).run();
   } catch { /* Analytics may never interrupt checkout. */ }
   return new Response(null, { status: 204 });
@@ -75,6 +90,11 @@ export async function getSummary(env, now = new Date()) {
   const dailySources = await env.DB.prepare(`SELECT utm_source,SUM(verified_visits) AS sessions FROM analytics_daily_utm_sources
     WHERE day >= ? GROUP BY utm_source`).bind(periodDay).all();
   const todayMap = mergeCounts(todayRows.results || []);
+  const checkoutErrors = await env.DB.prepare(`SELECT classification_reason AS code,country,COUNT(*) AS count,
+    COUNT(DISTINCT session_id) AS shoppers FROM analytics_events
+    WHERE event_name = 'checkout_form_error' AND verified_human = 1 AND created_at >= ?
+    GROUP BY classification_reason,country ORDER BY count DESC`)
+    .bind(new Date(now.getTime() - 86400000).toISOString()).all();
   const last30 = mergeCounts([...(recentRows.results || []), ...(dailyRows.results || [])]);
   const sourceTotals = new Map();
   for (const row of [...(sources.results || []), ...(dailySources.results || [])]) {
@@ -84,10 +104,48 @@ export async function getSummary(env, now = new Date()) {
     today: { page_views: todayMap.page_view?.count || 0, unique_visitors: todayMap.page_view?.unique_sessions || 0 },
     last_30_days: { page_views: last30.page_view?.count || 0, unique_visitors: last30.page_view?.unique_sessions || 0 },
     funnel: FUNNEL.map((step) => ({ step, count: last30[step]?.count || 0, unique_sessions: last30[step]?.unique_sessions || 0 })),
+    checkout_errors_24h: checkoutErrors.results || [],
     top_utm_sources: [...sourceTotals].map(([source, sessions]) => ({ source, sessions })).sort((a, b) => b.sessions - a.sessions).slice(0, 10),
     excluded_unverified_events: 0,
     visitor_definition: 'A verified browser visit after real interaction or seven visible seconds. Individual event rows are reduced to anonymous daily totals; different browsers or days may represent the same person.',
   });
+}
+
+// A browser's visible blocking errors must not be invisible merely because
+// the API itself returned 200. Send one owner alert per hour when a verified
+// checkout reaches a shipping/server blocker. No field values are retained.
+export async function alertCheckoutErrors(env, now = new Date()) {
+  const since = new Date(now.getTime() - 10 * 60000).toISOString();
+  const rows = await env.DB.prepare(`SELECT classification_reason AS code,country,COUNT(*) AS count,
+    COUNT(DISTINCT session_id) AS shoppers FROM analytics_events
+    WHERE event_name = 'checkout_form_error' AND verified_human = 1 AND created_at >= ?
+      AND classification_reason IN (?,?,?,?,?)
+    GROUP BY classification_reason,country ORDER BY count DESC`)
+    .bind(since, ...ALERT_CODES).all();
+  if (!(rows.results || []).length) return false;
+  const hourAgo = new Date(now.getTime() - 3600000).toISOString();
+  const recentAlert = await env.DB.prepare(`SELECT 1 AS sent FROM error_logs
+    WHERE service='checkout_monitor' AND error_type='checkout_form_alert_sent' AND created_at >= ? LIMIT 1`)
+    .bind(hourAgo).first();
+  if (recentAlert) return false;
+  const details = rows.results.map((row) =>
+    `${row.code} · ${row.country || 'unknown country'} · ${row.shoppers} shopper(s), ${row.count} event(s)`).join('\n');
+  const text = `A shopper encountered a blocking checkout error in the past 10 minutes.\n\n${details}\n\nCheck the live checkout, shipping quote endpoint and production D1 analytics/error logs. No payment should be retried from this alert.`;
+  try {
+    await sendEmail(env, {
+      to: env.ORDER_ALERT_EMAIL || 'harveymeale9@gmail.com',
+      subject: 'Checkout form blocked — investigate',
+      text,
+      html: `<p>A shopper encountered a blocking checkout error in the past 10 minutes.</p><pre>${details}</pre><p>Check checkout, shipping quotes and production logs. Do not retry a payment from this alert.</p>`,
+      idempotencyKey: `checkout-form-alert-${now.toISOString().slice(0, 13)}`,
+    });
+    await env.DB.prepare(`INSERT INTO error_logs(id,service,error_type,error_message) VALUES(?,?,?,?)`)
+      .bind(crypto.randomUUID(), 'checkout_monitor', 'checkout_form_alert_sent', details.slice(0, 1000)).run();
+    return true;
+  } catch (error) {
+    console.error('Checkout form alert failed:', error);
+    return false;
+  }
 }
 
 // D1 batch is atomic. Never delete raw events before every aggregate upsert

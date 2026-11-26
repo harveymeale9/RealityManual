@@ -5,7 +5,7 @@ import { stripeWebhook } from './webhook.js';
 import { processPendingOrders, reconcilePendingPayments } from './fulfillment.js';
 import { reviewRoute } from './review.js';
 import { processDueReviewRequests } from './reviewRequests.js';
-import { aggregateCompletedDays, getSummary, recordEvent } from './analytics.js';
+import { aggregateCompletedDays, alertCheckoutErrors, getSummary, recordEvent } from './analytics.js';
 import { getEmailHealth } from './emailHealth.js';
 import { allowedReportSource, reportSnapshot } from './reportSnapshot.js';
 import { issueVoucher } from './vouchers.js';
@@ -118,6 +118,7 @@ export default {
         ['payment reconciliation', () => reconcilePendingPayments(env)],
         ['fulfillment', () => processPendingOrders(env)],
         ['review requests', () => new Date().getUTCMinutes() < 5 ? processDueReviewRequests(env) : null],
+        ['checkout error alert', () => alertCheckoutErrors(env)],
         ['analytics aggregation', () => aggregateCompletedDays(env)],
       ]) {
         try { await task(); }

@@ -17,7 +17,7 @@ const SCHEMA = {
     confirmation_email_sent_at TEXT,shipping_email_sent_at TEXT,refund_email_sent_at TEXT,
     resend_contact_synced_at TEXT,order_status TEXT,created_at TEXT,updated_at TEXT`,
   analytics_events: `id TEXT,session_id TEXT,event_name TEXT,page TEXT,utm_source TEXT,utm_medium TEXT,
-    utm_campaign TEXT,utm_term TEXT,utm_content TEXT,country TEXT,verified_human INTEGER,created_at TEXT`,
+    utm_campaign TEXT,utm_term TEXT,utm_content TEXT,country TEXT,verified_human INTEGER,classification_reason TEXT,created_at TEXT`,
   analytics_daily_events: 'day TEXT,event_name TEXT,event_count INTEGER,verified_visits INTEGER',
   analytics_daily_utm_sources: 'day TEXT,utm_source TEXT,verified_visits INTEGER',
   analytics_daily_utm_landings: `day TEXT,utm_source TEXT,utm_medium TEXT,utm_campaign TEXT,

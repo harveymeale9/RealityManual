@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { aggregateCompletedDays, getSummary, recordEvent } from '../src/analytics.js';
+import { aggregateCompletedDays, alertCheckoutErrors, getSummary, recordEvent } from '../src/analytics.js';
 
 function fixture() {
   const sqlite = new DatabaseSync(':memory:');
@@ -49,4 +49,40 @@ test('only verified site browser events enter analytics, then roll into anonymou
   const after = await getSummary(env, new Date('2026-11-14T12:00:00.000Z'));
   assert.equal((await after.json()).last_30_days.page_views, 1);
   sqlite.close();
+});
+
+test('checkout form errors retain only a safe code/country and trigger a deduplicated owner alert', async () => {
+  const { sqlite, env } = fixture();
+  const event = {
+    session_id: 'shopper-1', event_name: 'checkout_form_error', page: '/checkout.html',
+    country: 'AU', error_code: 'shipping_quote_missing',
+    human_verified: true, human_verification: 'interaction',
+    email: 'must-not-be-stored@example.test', postal_code: '2000',
+  };
+  const request = (body) => new Request('https://api.example.test/api/analytics/event', {
+    method: 'POST', headers: { origin: 'https://realitymanual.com',
+      'user-agent': 'Mozilla/5.0', 'sec-fetch-site': 'same-site' },
+    body: JSON.stringify(body),
+  });
+  assert.equal((await recordEvent(request(event), env)).status, 204);
+  assert.equal((await recordEvent(request({ ...event, error_code: 'arbitrary private text' }), env)).status, 400);
+  const stored = sqlite.prepare("SELECT event_name,country,classification_reason FROM analytics_events").get();
+  assert.deepEqual({ ...stored }, { event_name: 'checkout_form_error', country: 'AU', classification_reason: 'shipping_quote_missing' });
+  const summary = await (await getSummary(env)).json();
+  assert.equal(summary.checkout_errors_24h[0].count, 1);
+  env.RESEND_API_KEY = 'test-key';
+  env.RESEND_FROM_EMAIL = 'orders@example.test';
+  const originalFetch = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = async (_url, options) => {
+    sent.push(JSON.parse(options.body));
+    return Response.json({ id: 'message-1' });
+  };
+  try {
+    assert.equal(await alertCheckoutErrors(env), true);
+    assert.equal(await alertCheckoutErrors(env), false);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].text, /shipping_quote_missing/);
+    assert.doesNotMatch(sent[0].text, /must-not-be-stored|2000/);
+  } finally { globalThis.fetch = originalFetch; sqlite.close(); }
 });
