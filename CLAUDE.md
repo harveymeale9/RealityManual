@@ -24817,3 +24817,7 @@ storefront's restrained dark/gold style and noindex metadata. Desktop and
 ## FAQ YouTube subscription link (2026-11-26)
 
 Harvey requested the FAQ's YouTube-channel link use the subscription-confirmation URL. Updated the "Where can I learn more about The Reality Manual?" answer on both the live homepage source and retained `/home2/` alias to `https://www.youtube.com/@the_reality_manual?sub_confirmation=1`. No other YouTube links or FAQ copy changed.
+
+## Remove duplicate `/home2/` page (2026-11-26)
+
+Harvey clarified there should be one storefront homepage, not a retained `/home2/` copy. Deleted `frontend/home2/index.html`; `frontend/index.html` is the sole homepage source and was left unchanged. Updated the checkout-attribution test to assert against that one page. The existing `home2-*` CSS class names and `home2-interiors` image directory remain because the actual homepage still uses them; deleting those assets or styles would break the live page. Historical mentions of `/home2/` in this record describe the old deployment, not a current second page.

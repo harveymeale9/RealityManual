@@ -94,18 +94,15 @@ test('returning browser records the newly opened post without overwriting first-
   });
 });
 
-test('each homepage checkout placement survives navigation as its own arrival event', () => {
+test('homepage checkout placements survive navigation as their own arrival events', () => {
   const homepage = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'index.html'), 'utf8');
-  const home2 = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'home2', 'index.html'), 'utf8');
   const checkout = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'js', 'checkout.js'), 'utf8');
-  for (const page of [homepage, home2]) {
-    ['header', 'primary_offer', 'final_cta'].forEach((source) => {
-      assert.match(page, new RegExp('checkout\\.html\\?cta_source=' + source));
-    });
-    ['checkout_cta_header_clicked', 'checkout_cta_primary_clicked', 'checkout_cta_final_clicked'].forEach((eventName) => {
-      assert.match(page, new RegExp(eventName));
-    });
-  }
+  ['header', 'primary_offer', 'final_cta'].forEach((source) => {
+    assert.match(homepage, new RegExp('checkout\\.html\\?cta_source=' + source));
+  });
+  ['checkout_cta_header_clicked', 'checkout_cta_primary_clicked', 'checkout_cta_final_clicked'].forEach((eventName) => {
+    assert.match(homepage, new RegExp(eventName));
+  });
   ['checkout_arrival_header', 'checkout_arrival_primary', 'checkout_arrival_final'].forEach((eventName) => {
     assert.match(checkout, new RegExp(eventName));
   });
