@@ -53,7 +53,9 @@ export async function recordEvent(request, env) {
       crypto.randomUUID(), clip(body.session_id), body.event_name, clip(body.page), null,
       clip(body.referrer), clip(body.utm_source), clip(body.utm_medium), clip(body.utm_campaign),
       clip(body.utm_term), clip(body.utm_content),
-      body.event_name === 'checkout_form_error' && /^[A-Z]{2}$/.test(body.country || '') ? body.country : null,
+      body.event_name === 'checkout_form_error'
+        ? (/^[A-Z]{2}$/.test(body.country || '') ? body.country : null)
+        : clip(body.country),
       1, clip(body.human_verification),
       body.event_name === 'checkout_form_error' ? body.error_code : 'verified',
     ).run();
