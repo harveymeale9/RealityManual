@@ -24861,3 +24861,7 @@ Deployment verification: production Worker version `046aebc7-941a-496d-a6c1-9f94
 ## Owner-requested exclusion from Face Reveal follow-up (2026-11-26)
 
 Harvey asked that a family member's newly placed Australian order not receive the later Face Reveal/review-request email. A read-only production D1 check matched his supplied email to exactly one live paid Australian order (prefix `af699ef7`, $95.75, BookVault accepted) and confirmed no review request had been sent. Set `review_request_opt_out_at` on that order only, then verified the timestamp was present and `review_request_email_sent_at` remained null. The existing Worker scheduler excludes any address with an opt-out on any order, both at candidate selection and immediately before send, so this suppresses the follow-up for that customer email without disabling normal order/shipping notifications. No code or customer charge was changed.
+
+## Vision placeholder is indexable (2026-11-26)
+
+At Harvey's request, removed the `noindex` robots meta tag from the `/vision/` coming-soon page. The canonical URL remains `https://realitymanual.com/vision/`; `robots.txt` does not disallow the path, and the live response has no `X-Robots-Tag` header. This permits indexing but does not guarantee a search engine will index a content-light placeholder. The page content and checkout were not changed.
