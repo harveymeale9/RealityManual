@@ -7,6 +7,7 @@ import { reviewRoute } from './review.js';
 import { processDueReviewRequests } from './reviewRequests.js';
 import { aggregateCompletedDays, alertCheckoutErrors, getSummary, recordEvent } from './analytics.js';
 import { getEmailHealth } from './emailHealth.js';
+import { captureReviewOpenMetrics } from './emailOpenTracking.js';
 import { allowedReportSource, reportSnapshot } from './reportSnapshot.js';
 import { issueVoucher } from './vouchers.js';
 import { tagReaderSubmission } from './readerTags.js';
@@ -118,6 +119,10 @@ export default {
         ['payment reconciliation', () => reconcilePendingPayments(env)],
         ['fulfillment', () => processPendingOrders(env)],
         ['review requests', () => new Date().getUTCMinutes() < 5 ? processDueReviewRequests(env) : null],
+        ['review open metrics', () => {
+          const now = new Date();
+          return now.getUTCHours() === 2 && now.getUTCMinutes() < 5 ? captureReviewOpenMetrics(env, now) : null;
+        }],
         ['checkout error alert', () => alertCheckoutErrors(env)],
         ['analytics aggregation', () => aggregateCompletedDays(env)],
       ]) {

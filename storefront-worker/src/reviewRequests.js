@@ -36,7 +36,7 @@ export async function processDueReviewRequests(env, now = new Date()) {
         AND review_request_opt_out_at IS NOT NULL LIMIT 1`).bind(latest.email).first();
       if (optedOut) continue;
       const email = reviewRequestEmail(latest, { postalAddress: env.MARKETING_POSTAL_ADDRESS });
-      await sendEmail(env, {
+      const result = await sendEmail(env, {
         to: latest.email, ...email, idempotencyKey: `${latest.id}-review-request`,
         tags: [
           { name: 'email_type', value: 'review_request_email' },
@@ -45,6 +45,10 @@ export async function processDueReviewRequests(env, now = new Date()) {
           { name: 'quantity_band', value: quantityBand(latest.quantity) },
         ],
       });
+      if (!result?.id) throw new Error('Resend accepted review email without an ID for open tracking.');
+      await env.DB.prepare(`INSERT OR IGNORE INTO email_open_tracking(email_id, email_type, sent_at)
+        VALUES(?, 'review_request_email', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+        .bind(result.id).run();
       await env.DB.prepare(`UPDATE orders SET review_request_email_sent_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
         WHERE id = ? AND review_request_email_sent_at IS NULL`).bind(latest.id).run();
       sent++;
