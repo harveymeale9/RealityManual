@@ -89,3 +89,39 @@ test('checkout form errors retain only a safe code/country and trigger a dedupli
     assert.doesNotMatch(sent[0].text, /must-not-be-stored|2000/);
   } finally { globalThis.fetch = originalFetch; sqlite.close(); }
 });
+
+test('checkout diagnostics keep fixed failure stages and link uncertain payments to current order status', async () => {
+  const { sqlite, env } = fixture();
+  const orderId = '12345678-1234-4234-8234-123456789abc';
+  sqlite.prepare(`INSERT INTO orders(id,customer_name,email,phone,country,street1,city,postal_code,
+    book_price_cents,shipping_price_cents,total_price_cents,order_status)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(orderId, 'Private Name', 'private@example.test', '555',
+    'US', 'Private Street', 'New York', '10001', 6500, 1800, 8300, 'BOOKVAULT_ACCEPTED');
+  const sendEvent = (body) => recordEvent(new Request('https://api.example.test/api/analytics/event', {
+    method: 'POST', headers: { origin: 'https://realitymanual.com',
+      'user-agent': 'Mozilla/5.0', 'sec-fetch-site': 'same-site' },
+    body: JSON.stringify({ session_id: 'shopper-2', event_name: 'checkout_form_error', page: '/checkout.html',
+      human_verified: true, human_verification: 'interaction', ...body }),
+  }), env);
+  assert.equal((await sendEvent({ error_code: 'payment_config_error:config_request' })).status, 204);
+  assert.equal((await sendEvent({ error_code: 'payment_uncertain:confirm_timeout', country: 'US', order_id: orderId })).status, 204);
+  assert.equal((await sendEvent({ error_code: 'payment_uncertain:card_number_1234', order_id: orderId })).status, 400);
+  const stored = sqlite.prepare("SELECT classification_reason,order_id FROM analytics_events WHERE classification_reason LIKE 'payment_uncertain:%'").get();
+  assert.equal(stored.classification_reason, 'payment_uncertain:confirm_timeout');
+  assert.equal(stored.order_id, orderId);
+  env.RESEND_API_KEY = 'test-key';
+  env.RESEND_FROM_EMAIL = 'orders@example.test';
+  const originalFetch = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = async (_url, options) => {
+    sent.push(JSON.parse(options.body));
+    return Response.json({ id: 'message-2' });
+  };
+  try {
+    assert.equal(await alertCheckoutErrors(env), true);
+    assert.match(sent[0].text, /payment_config_error:config_request/);
+    assert.match(sent[0].text, /payment_uncertain:confirm_timeout/);
+    assert.match(sent[0].text, /order 12345678 · current status BOOKVAULT_ACCEPTED/);
+    assert.doesNotMatch(sent[0].text, /Private Name|private@example\.test|Private Street|10001/);
+  } finally { globalThis.fetch = originalFetch; sqlite.close(); }
+});

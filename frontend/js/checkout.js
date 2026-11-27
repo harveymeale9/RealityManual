@@ -88,8 +88,10 @@
   initializeStripe();
 
   async function initializeStripe() {
+    let setupStage = 'availability_request';
     try {
       const availability = await fetch(`${API_BASE_URL}/api/checkout/availability`, { cache: 'no-store' });
+      setupStage = 'availability_response';
       if (!availability.ok) throw new Error('checkout_availability_unavailable');
       checkoutPaused = !(await availability.json()).available;
       if (checkoutPaused) {
@@ -97,11 +99,14 @@
         submitButton.disabled = true;
         return;
       }
+      setupStage = 'config_request';
       const response = await fetch(`${API_BASE_URL}/api/config/stripe`);
+      setupStage = 'config_response';
       if (!response.ok) throw new Error('stripe_config_unavailable');
       const { publishable_key: publishableKey } = await response.json();
       if (!publishableKey || !publishableKey.startsWith('pk_')) throw new Error('stripe_config_invalid');
 
+      setupStage = 'stripe_setup';
       stripe = Stripe(publishableKey);
       elements = stripe.elements({
         mode: 'payment',
@@ -130,12 +135,13 @@
         },
       });
       const paymentElement = elements.create('payment');
+      setupStage = 'element_mount';
       paymentElement.mount('#payment-element');
       paymentElement.on('ready', () => {
         submitButton.disabled = checkoutPaused;
       });
     } catch (err) {
-      showFormError('Secure payment options could not be loaded. Please refresh the page and try again.', 'payment_config_error');
+      showFormError('Secure payment options could not be loaded. Please refresh the page and try again.', `payment_config_error:${setupStage}`);
     }
   }
 
@@ -356,19 +362,23 @@
     return `$${(cents / 100).toFixed(2)}`;
   }
 
-  function showFormError(message, code) {
+  function showFormError(message, code, orderId = null) {
     errorBanner.textContent = message;
     errorBanner.classList.add('visible');
     // Never send names, emails, phone numbers, addresses, postcodes, voucher
     // codes, or provider-supplied error text to form telemetry.
-    if (code) RMAnalytics.track('checkout_form_error', {
-      country: /^[A-Z]{2}$/.test(countrySelect.value) ? countrySelect.value : '',
-      error_code: code,
-    });
+    if (code) {
+      const event = {
+        country: /^[A-Z]{2}$/.test(countrySelect.value) ? countrySelect.value : '',
+        error_code: code,
+      };
+      if (code.startsWith('payment_uncertain:') && orderId) event.order_id = orderId;
+      RMAnalytics.track('checkout_form_error', event);
+    }
   }
 
-  function showPaymentUncertain(confirmationUrl) {
-    showFormError('We cannot confirm your payment yet. Please do not pay again. Check your order status here, and watch your email for an update.', 'payment_uncertain');
+  function showPaymentUncertain(confirmationUrl, orderId, reason) {
+    showFormError('We cannot confirm your payment yet. Please do not pay again. Check your order status here, and watch your email for an update.', `payment_uncertain:${reason}`, orderId);
     const link = document.createElement('a');
     link.href = confirmationUrl;
     link.textContent = 'Check order status';
@@ -562,14 +572,15 @@
         clientSecret: orderResponse.client_secret,
         confirmParams: { return_url: confirmationUrl },
       }), 35000));
-    } catch {
-      showPaymentUncertain(confirmationUrl);
+    } catch (error) {
+      showPaymentUncertain(confirmationUrl, orderResponse.order_id,
+        error?.message === 'payment_step_timeout' ? 'confirm_timeout' : 'confirm_exception');
       return;
     }
 
     if (confirmError) {
       if (!['card_error', 'validation_error'].includes(confirmError.type)) {
-        showPaymentUncertain(confirmationUrl);
+        showPaymentUncertain(confirmationUrl, orderResponse.order_id, 'confirm_non_card_error');
         return;
       }
       showFormError(confirmError.message || 'Your payment could not be completed. Please try again.', 'payment_declined');

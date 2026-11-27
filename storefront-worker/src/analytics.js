@@ -5,9 +5,16 @@ const CHECKOUT_ERROR_CODES = new Set([
   'shipping_quote_missing', 'checkout_quote_changed', 'checkout_rejected',
   'checkout_server_error', 'checkout_unavailable', 'payment_config_error',
   'payment_element_timeout', 'payment_element_error', 'payment_declined', 'payment_uncertain',
+  'payment_config_error:availability_request', 'payment_config_error:availability_response',
+  'payment_config_error:config_request', 'payment_config_error:config_response',
+  'payment_config_error:stripe_setup', 'payment_config_error:element_mount',
+  'payment_uncertain:confirm_timeout', 'payment_uncertain:confirm_exception',
+  'payment_uncertain:confirm_non_card_error',
 ]);
 const QUOTE_STATE_CODES = new Set(['needs_postcode', 'requested', 'stale_retry', 'applied', 'failed']);
-const ALERT_CODES = ['shipping_quote_failed', 'shipping_quote_missing', 'checkout_server_error', 'payment_config_error', 'payment_uncertain'];
+const ALERT_CODES = ['shipping_quote_failed', 'shipping_quote_missing', 'checkout_server_error',
+  ...[...CHECKOUT_ERROR_CODES].filter((code) => code.startsWith('payment_config_error') || code.startsWith('payment_uncertain'))];
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EVENTS = new Set([
   'human_verified', 'page_view', 'utm_landing', 'landing_page_view', 'purchase_cta_clicked',
   'checkout_cta_header_clicked', 'checkout_cta_primary_clicked', 'checkout_cta_final_clicked',
@@ -56,7 +63,9 @@ export async function recordEvent(request, env) {
       id,session_id,event_name,page,order_id,referrer,utm_source,utm_medium,
       utm_campaign,utm_term,utm_content,country,verified_human,verification_method,classification_reason
     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
-      crypto.randomUUID(), clip(body.session_id), body.event_name, clip(body.page), null,
+      crypto.randomUUID(), clip(body.session_id), body.event_name, clip(body.page),
+      body.event_name === 'checkout_form_error' && body.error_code.startsWith('payment_uncertain') &&
+        UUID.test(body.order_id || '') ? body.order_id : null,
       clip(body.referrer), clip(body.utm_source), clip(body.utm_medium), clip(body.utm_campaign),
       clip(body.utm_term), clip(body.utm_content),
       ['checkout_form_error', 'checkout_quote_state'].includes(body.event_name)
@@ -130,11 +139,14 @@ export async function getSummary(env, now = new Date()) {
 // checkout reaches a shipping/server blocker. No field values are retained.
 export async function alertCheckoutErrors(env, now = new Date()) {
   const since = new Date(now.getTime() - 10 * 60000).toISOString();
-  const rows = await env.DB.prepare(`SELECT classification_reason AS code,country,COUNT(*) AS count,
-    COUNT(DISTINCT session_id) AS shoppers FROM analytics_events
-    WHERE event_name = 'checkout_form_error' AND verified_human = 1 AND created_at >= ?
-      AND classification_reason IN (?,?,?,?,?)
-    GROUP BY classification_reason,country ORDER BY count DESC`)
+  const placeholders = ALERT_CODES.map(() => '?').join(',');
+  const rows = await env.DB.prepare(`SELECT e.classification_reason AS code,e.country,e.order_id,
+    MAX(o.order_status) AS order_status,COUNT(*) AS count,
+    COUNT(DISTINCT e.session_id) AS shoppers FROM analytics_events e
+    LEFT JOIN orders o ON o.id=e.order_id
+    WHERE e.event_name = 'checkout_form_error' AND e.verified_human = 1 AND e.created_at >= ?
+      AND e.classification_reason IN (${placeholders})
+    GROUP BY e.classification_reason,e.country,e.order_id ORDER BY count DESC`)
     .bind(since, ...ALERT_CODES).all();
   if (!(rows.results || []).length) return false;
   const hourAgo = new Date(now.getTime() - 3600000).toISOString();
@@ -143,7 +155,8 @@ export async function alertCheckoutErrors(env, now = new Date()) {
     .bind(hourAgo).first();
   if (recentAlert) return false;
   const details = rows.results.map((row) =>
-    `${row.code} · ${row.country || 'unknown country'} · ${row.shoppers} shopper(s), ${row.count} event(s)`).join('\n');
+    `${row.code} · ${row.country || 'unknown country'} · ${row.shoppers} shopper(s), ${row.count} event(s)` +
+    (row.order_id ? ` · order ${row.order_id.slice(0, 8)} · current status ${row.order_status || 'not found'}` : '')).join('\n');
   const text = `A shopper encountered a blocking checkout error in the past 10 minutes.\n\n${details}\n\nCheck the live checkout, shipping quote endpoint and production D1 analytics/error logs. No payment should be retried from this alert.`;
   try {
     await sendEmail(env, {
