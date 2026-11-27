@@ -45,4 +45,26 @@ function removeUnpublished(piece, enabled) {
   return true;
 }
 
-module.exports = { paused, allowed, removeUnpublished };
+function restoreUnpublished(piece, enabled, destination) {
+  if (!enabled || !isShortform(piece) || !piece.facebookShortPausedWasSelected ||
+      piece.facebookPublishStatus === 'done' || piece.stage === 'live' ||
+      !Array.isArray(piece.platforms) || piece.platforms.includes('facebook')) return false;
+  piece.platforms.push('facebook');
+  if (piece.stage === 'publishing_queue' && Array.isArray(piece.queuedPublishDestinations) &&
+      piece.queuedPublishDestinations.length && destination) {
+    for (const field of ['queuedPublishDestinations', 'publishBatchDestinations']) {
+      if (Array.isArray(piece[field]) && !piece[field].some((item) => item.platform === 'facebook')) {
+        piece[field].push({ ...destination });
+      }
+    }
+    if (Array.isArray(piece.publishBatchPlatforms) && !piece.publishBatchPlatforms.includes('facebook')) {
+      piece.publishBatchPlatforms.push('facebook');
+    }
+    piece.facebookPublishStatus = 'queued';
+    piece.facebookPublishError = '';
+  }
+  piece.facebookShortPausedWasSelected = false;
+  return true;
+}
+
+module.exports = { paused, allowed, removeUnpublished, restoreUnpublished };

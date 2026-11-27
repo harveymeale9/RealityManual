@@ -29,6 +29,12 @@ function probe(file) {
     codec: video.codec_name, audioCodec: audio && audio.codec_name || '' };
 }
 
+function assertFullHd(metadata) {
+  if (Math.min(Number(metadata && metadata.width) || 0, Number(metadata && metadata.height) || 0) < 1080) {
+    throw new Error('Facebook upload paused: source is below 1080p; use a full-resolution master.');
+  }
+}
+
 function transcodeArgs(source, output, metadata) {
   const landscape = metadata.width >= metadata.height;
   const scale = Math.min(1, (landscape ? 1920 : 1080) / metadata.width,
@@ -76,4 +82,4 @@ async function makeCompactCopy(source, output, options) {
   }
 }
 
-module.exports = { needsCompactCopy, transcodeArgs, makeCompactCopy, MAX_OUTPUT_BYTES };
+module.exports = { needsCompactCopy, probe, assertFullHd, transcodeArgs, makeCompactCopy, MAX_OUTPUT_BYTES };

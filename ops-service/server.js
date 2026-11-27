@@ -138,9 +138,9 @@ const buffer = bufferService.setup({
 // Owner-paused while the TikTok account is deactivated. Keep Buffer credentials
 // and all publish plumbing so this can be re-enabled deliberately later.
 const TIKTOK_PUBLISHING_ENABLED = process.env.TIKTOK_PUBLISHING_ENABLED === 'true';
-// Instagram Reels now cross-post to the Facebook Page. Keep the direct Meta
-// publisher connected for long-form videos and for an explicit later restart.
-const FACEBOOK_SHORTFORM_PUBLISHING_ENABLED = process.env.FACEBOOK_SHORTFORM_PUBLISHING_ENABLED === 'true';
+// Direct Facebook short-form publishing is on again. An explicit false remains
+// available for a later owner-requested pause without removing the pipeline.
+const FACEBOOK_SHORTFORM_PUBLISHING_ENABLED = process.env.FACEBOOK_SHORTFORM_PUBLISHING_ENABLED !== 'false';
 const ACTIVE_SHORT_PLATFORMS = (TIKTOK_PUBLISHING_ENABLED
   ? ['ytshort', 'tiktok', 'instagram', 'facebook']
   : ['ytshort', 'instagram', 'facebook']).filter(function (platform) {
@@ -4046,6 +4046,23 @@ function pauseUnpublishedFacebookShortWork() {
   return changed;
 }
 
+function restoreUnpublishedFacebookShortWork() {
+  if (!FACEBOOK_SHORTFORM_PUBLISHING_ENABLED) return 0;
+  const row = stmts.getOne.get('settings', 'settings');
+  const settings = row ? JSON.parse(row.data) : {};
+  const caption = settings.captions && settings.captions.shortform && settings.captions.shortform.facebook;
+  let changed = 0;
+  for (const piece of allPieceRecords()) {
+    const destination = caption ? { platform: 'facebook', title: piece.title || 'Untitled',
+      caption: caption, privacyStatus: 'public' } : null;
+    if (!facebookShortformPause.restoreUnpublished(piece, FACEBOOK_SHORTFORM_PUBLISHING_ENABLED, destination)) continue;
+    piece.updatedAt = new Date().toISOString();
+    savePieceRecord(piece);
+    changed++;
+  }
+  return changed;
+}
+
 // This is deliberately separate from the normal publishing queue: a replay
 // must never touch another platform or move a Live Kanban card backwards.
 let facebookReplayInFlight = false;
@@ -4132,6 +4149,21 @@ async function advanceFacebookReplay() {
     if (!piece || piece.facebookVideoId !== job.old_video_id) throw new Error('Facebook replay piece changed before release.');
     const remote = await r2Storage.headKey(job.backup_key);
     if (remote.sizeBytes !== job.size_bytes) throw new Error('Facebook replay backup size mismatch.');
+    // The safety archive contains Facebook-delivered transcodes, not the
+    // original masters. A 360p copy must never be replayed as a new post.
+    const checkPath = path.join(DATA_DIR, 'tmp', 'facebook-replay-check-' + crypto.randomUUID() + '.mp4');
+    try {
+      await r2Storage.downloadKey(job.backup_key, checkPath);
+      facebookPublishMedia.assertFullHd(facebookPublishMedia.probe(checkPath));
+    } catch (error) {
+      if (!String(error.message || error).includes('below 1080p')) throw error;
+      db.prepare("UPDATE facebook_replay_jobs SET status='needs_hd_source', error=? WHERE piece_id=? AND status='pending'")
+        .run('Backup is below 1080p; a full-resolution master is required before replay.', job.piece_id);
+      console.warn('Facebook replay skipped low-resolution backup for ' + job.piece_id.slice(0, 8));
+      return;
+    } finally {
+      fs.rmSync(checkPath, { force: true });
+    }
     const row = stmts.getOne.get('settings', 'settings');
     const settings = row ? JSON.parse(row.data) : {};
     const group = piece.contentType === 'longform' ? 'longform' : 'shortform';
@@ -4760,10 +4792,12 @@ async function runPlatformPublishBatch(id, destinations, options) {
             const media = await localPublishMedia(id);
             let compactPath = '';
             try {
+              facebookPublishMedia.assertFullHd(facebookPublishMedia.probe(media.path));
               let publishPath = media.path;
               if (facebookPublishMedia.needsCompactCopy(mediaSize, openingPiece, options.retryFailed)) {
                 compactPath = path.join(DATA_DIR, 'tmp', 'facebook-publish-' + id + '-' + crypto.randomUUID() + '.mp4');
                 const compact = await facebookPublishMedia.makeCompactCopy(media.path, compactPath);
+                facebookPublishMedia.assertFullHd(facebookPublishMedia.probe(compact.path));
                 publishPath = compact.path;
                 console.log('Facebook retry using verified compact rendition for ' + id + ' (' + compact.sizeBytes + ' bytes)');
               }
@@ -4786,6 +4820,9 @@ async function runPlatformPublishBatch(id, destinations, options) {
               media.cleanup();
             }
           } else {
+            const media = await localPublishMedia(id);
+            try { facebookPublishMedia.assertFullHd(facebookPublishMedia.probe(media.path)); }
+            finally { media.cleanup(); }
             updatePieceFields(id, { facebookUploadStartedAt: new Date().toISOString() });
             result = await metaPublisher.publishFacebookVideo({
               pageId: auth.page_id, pageToken: auth.page_access_token,
@@ -5923,6 +5960,8 @@ const httpServer = app.listen(PORT, function () {
   if (pausedTiktokPieces) console.log('TikTok owner pause: removed unpublished destinations from ' + pausedTiktokPieces + ' piece(s)');
   const pausedFacebookPieces = pauseUnpublishedFacebookShortWork();
   if (pausedFacebookPieces) console.log('Facebook short-form pause: removed unpublished destinations from ' + pausedFacebookPieces + ' piece(s)');
+  const restoredFacebookPieces = restoreUnpublishedFacebookShortWork();
+  if (restoredFacebookPieces) console.log('Facebook short-form re-enabled for ' + restoredFacebookPieces + ' unpublished piece(s)');
   seedFacebookReplay().then(advanceFacebookReplay)
     .catch(function (error) { console.error('Facebook replay startup paused:', error.message); });
   const facebookReplayTimer = setInterval(function () {

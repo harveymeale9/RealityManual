@@ -8,6 +8,12 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const media = require('../src/facebookPublishMedia');
 
+test('Facebook upload quality gate rejects 360p and accepts landscape or portrait 1080p', function () {
+  assert.throws(() => media.assertFullHd({ width: 640, height: 360 }), /below 1080p/);
+  assert.doesNotThrow(() => media.assertFullHd({ width: 1920, height: 1080 }));
+  assert.doesNotThrow(() => media.assertFullHd({ width: 1080, height: 1440 }));
+});
+
 test('only a failed, large Facebook retry switches to a compact rendition', function () {
   const large = 5.97 * 1000 * 1000 * 1000;
   assert.equal(media.needsCompactCopy(large, { facebookPublishError: 'Meta code 6000' }, false), false);

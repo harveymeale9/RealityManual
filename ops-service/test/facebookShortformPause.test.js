@@ -48,3 +48,18 @@ test('an old Facebook-only short returns to Final Check instead of sticking in q
   assert.deepEqual(piece.queuedPublishDestinations, []);
   assert.deepEqual(piece.publishBatchPlatforms, []);
 });
+
+test('re-enabling restores selected queued shorts without republishing live history', () => {
+  const piece = { contentType: 'long_short', stage: 'publishing_queue',
+    facebookShortPausedWasSelected: true, facebookPublishStatus: 'not_required',
+    platforms: ['ytshort', 'instagram'], publishBatchPlatforms: ['ytshort', 'instagram'],
+    queuedPublishDestinations: [{ platform: 'ytshort' }, { platform: 'instagram' }],
+    publishBatchDestinations: [{ platform: 'ytshort' }, { platform: 'instagram' }] };
+  assert.equal(policy.restoreUnpublished(piece, true, { platform: 'facebook', caption: 'approved' }), true);
+  assert.deepEqual(piece.platforms, ['ytshort', 'instagram', 'facebook']);
+  assert.deepEqual(piece.queuedPublishDestinations.map((item) => item.platform), ['ytshort', 'instagram', 'facebook']);
+  assert.equal(piece.facebookPublishStatus, 'queued');
+  assert.equal(policy.restoreUnpublished(piece, true, { platform: 'facebook' }), false);
+  const live = { ...piece, stage: 'live', facebookShortPausedWasSelected: true, platforms: ['ytshort', 'instagram'] };
+  assert.equal(policy.restoreUnpublished(live, true, { platform: 'facebook' }), false);
+});
