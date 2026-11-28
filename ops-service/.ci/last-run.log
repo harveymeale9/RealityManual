@@ -8,32 +8,18 @@
 + git fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
-   8bd1523..ba83434  main       -> origin/main
+   ba83434..900b02c  main       -> origin/main
 + git merge --ff-only origin/main
-Updating 8bd1523..ba83434
+Updating ba83434..900b02c
 Fast-forward
- CLAUDE.md                                          |  18 ++++
- frontend/privacy.html                              |   7 +-
- frontend/vision/index.html                         |   4 +-
- ops-service/.ci/last-run.log                       | 102 +++++++++++----------
- ops-service/public/app.js                          |  98 +++++++++++++++-----
- ops-service/public/draft-recovery.html             |  65 +++++++++++++
- ops-service/public/index.html                      |   4 +-
- ops-service/public/style.css                       |   3 +-
- ops-service/test/pieceDraftRecovery.test.js        |  60 ++++++++++++
- .../migrations/2026-11-27-email-opens.sql          |   8 ++
- storefront-worker/src/emailOpenTracking.js         |  24 +++++
- storefront-worker/src/index.js                     |   5 +
- storefront-worker/src/reviewRequests.js            |   6 +-
- storefront-worker/test/emailOpenTracking.test.js   |  34 +++++++
- 14 files changed, 359 insertions(+), 79 deletions(-)
- create mode 100644 ops-service/public/draft-recovery.html
- create mode 100644 ops-service/test/pieceDraftRecovery.test.js
- create mode 100644 storefront-worker/migrations/2026-11-27-email-opens.sql
- create mode 100644 storefront-worker/src/emailOpenTracking.js
- create mode 100644 storefront-worker/test/emailOpenTracking.test.js
+ CLAUDE.md                     |   8 ++
+ ops-service/.ci/last-run.log  | 191 +++++++-----------------------------------
+ ops-service/public/app.js     |  58 ++++++++++---
+ ops-service/public/index.html |   4 +-
+ ops-service/public/style.css  |   2 +
+ 5 files changed, 92 insertions(+), 171 deletions(-)
 ++ git rev-parse HEAD
-+ NEW_HEAD=ba83434cf61ff92308c1db7e3d5d4b62e39e5698
++ NEW_HEAD=900b02ca09b1caf2cc69ff648006d22f3ac88422
 + git -C /srv/realitymanual-repo fetch origin main
 From https://github.com/harveymeale9/RealityManual
  * branch            main       -> FETCH_HEAD
@@ -46,12 +32,12 @@ Already up to date.
 + NEEDS_REBUILD=1
 + '[' -n 8bd1523b903d8588adc797c7e97e6684eb6cca04 ']'
 + git cat-file -e '8bd1523b903d8588adc797c7e97e6684eb6cca04^{commit}'
-++ git diff --name-only 8bd1523b903d8588adc797c7e97e6684eb6cca04 ba83434cf61ff92308c1db7e3d5d4b62e39e5698 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
+++ git diff --name-only 8bd1523b903d8588adc797c7e97e6684eb6cca04 900b02ca09b1caf2cc69ff648006d22f3ac88422 -- ops-service/server.js ops-service/src ops-service/package.json ops-service/package-lock.json ops-service/Dockerfile ops-service/deploy.sh
 + '[' -z '' ']'
 + NEEDS_REBUILD=0
 + '[' 0 = 1 ']'
 + '[' 0 = 0 ']'
-+ echo 'no backend changes between 8bd1523b903d8588adc797c7e97e6684eb6cca04 and ba83434cf61ff92308c1db7e3d5d4b62e39e5698 — already live via git pull, skipping rebuild/restart'
-no backend changes between 8bd1523b903d8588adc797c7e97e6684eb6cca04 and ba83434cf61ff92308c1db7e3d5d4b62e39e5698 — already live via git pull, skipping rebuild/restart
++ echo 'no backend changes between 8bd1523b903d8588adc797c7e97e6684eb6cca04 and 900b02ca09b1caf2cc69ff648006d22f3ac88422 — already live via git pull, skipping rebuild/restart'
+no backend changes between 8bd1523b903d8588adc797c7e97e6684eb6cca04 and 900b02ca09b1caf2cc69ff648006d22f3ac88422 — already live via git pull, skipping rebuild/restart
 + exit 0
 ssh exit code: 0
