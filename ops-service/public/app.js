@@ -2523,6 +2523,7 @@
   var pieces = {};
   var piecesLoadedPromise = null;
   var conflictToastTimer = null;
+  var saveFailureToastId = null;
   var PIECE_DRAFTS_KEY = 'rm-content-piece-drafts-v1';
   var PIECE_RECOVERY_KEY = 'rm-content-piece-recovery-v1';
   var activeConflictId = null;
@@ -2565,9 +2566,9 @@
 
   function clearPieceDraftSnapshot(id, revision) {
     var drafts = readPieceDrafts();
-    if (!drafts[id] || (revision && drafts[id].revision !== revision)) return;
+    if (!drafts[id] || (revision && drafts[id].revision !== revision)) return false;
     delete drafts[id];
-    writePieceDrafts(drafts);
+    return writePieceDrafts(drafts);
   }
 
   // A local draft can be different even when the server's timestamp is newer
@@ -3722,6 +3723,8 @@
   }
 
   function showModal() {
+    clearTimeout(saveFlag._t);
+    saveFlag.classList.remove('show', 'pending', 'failed');
     modalWrap.classList.add('open');
     pieceModal.setAttribute('aria-hidden', 'false');
     scrim.classList.add('show');
@@ -3764,9 +3767,39 @@
   }
 
   function flashSaved() {
+    saveFlag.textContent = 'Saved';
+    saveFlag.classList.remove('pending', 'failed');
     saveFlag.classList.add('show');
     clearTimeout(saveFlag._t);
     saveFlag._t = setTimeout(function () { saveFlag.classList.remove('show'); }, 1400);
+  }
+
+  function showSaveState(state) {
+    clearTimeout(saveFlag._t);
+    saveFlag.textContent = state === 'failed' ? 'Not saved' : 'Saving…';
+    saveFlag.classList.toggle('failed', state === 'failed');
+    saveFlag.classList.toggle('pending', state !== 'failed');
+    saveFlag.classList.add('show');
+  }
+
+  function acknowledgePieceSave(id, revision) {
+    var cleared = clearPieceDraftSnapshot(id, revision);
+    if (activeId !== id) return;
+    if (cleared) {
+      if (saveFailureToastId === id) {
+        var toast = document.getElementById('pieceConflictToast');
+        if (toast) toast.classList.remove('show');
+        saveFailureToastId = null;
+      }
+      flashSaved();
+    }
+    else showSaveState('pending');
+  }
+
+  function showPieceSaveFailure(id) {
+    saveFailureToastId = id;
+    if (activeId === id) showSaveState('failed');
+    showPieceConflict('That note could not be saved yet. Your local recovery copy has been kept.', true);
   }
 
   function hasText(v) {
@@ -3787,6 +3820,7 @@
     p.updatedAt = nowIso();
     var draftRevision = storePieceDraftSnapshot(p);
     metaUpdated.textContent = 'Updated ' + fmtFull(p.updatedAt);
+    showSaveState(draftRevision ? 'pending' : 'failed');
 
     if (isNewUnsaved) {
       if (hasText(vals)) {
@@ -3794,10 +3828,11 @@
         modalEyebrowText.textContent = 'Editing piece';
         metaCreated.textContent = 'Created ' + fmtFull(p.createdAt);
         Store.put('pieces', p).then(function () {
-          clearPieceDraftSnapshot(p.id, draftRevision);
-          flashSaved();
+          acknowledgePieceSave(p.id, draftRevision);
           notifyPiecesChanged();
-        }).catch(function () { showPieceConflict('That note could not be saved yet. Your local recovery copy has been kept.'); });
+        }).catch(function () {
+          showPieceSaveFailure(p.id);
+        });
       } else {
         notifyPiecesChanged();
       }
@@ -3813,13 +3848,13 @@
     }
 
     Store.put('pieces', p).then(function () {
-      clearPieceDraftSnapshot(p.id, draftRevision);
+      acknowledgePieceSave(p.id, draftRevision);
       if (p.hasVideo) updateStageAndScheduleUI(p);
-      flashSaved();
       if (p.stage !== prevStage) notifyPieceMoved(p.id);
       else notifyPiecesChanged();
     }).catch(function (error) {
-      if (!error || error.code !== 'stale_write') showPieceConflict('That note could not be saved yet. Your local recovery copy has been kept.');
+      if (activeId === p.id) showSaveState('failed');
+      if (!error || error.code !== 'stale_write') showPieceSaveFailure(p.id);
     });
   }
 
@@ -3831,8 +3866,10 @@
   function captureDraftAndDebounceSync() {
     if (activeId && pieces[activeId]) {
       var snapshot = Object.assign({}, pieces[activeId], currentFormValues(), { updatedAt: nowIso() });
-      storePieceDraftSnapshot(snapshot);
+      var revision = storePieceDraftSnapshot(snapshot);
+      showSaveState(revision && activeId !== activeConflictId ? 'pending' : 'failed');
     }
+    if (activeId === activeConflictId) return;
     debounceSync();
   }
 
@@ -3926,12 +3963,13 @@
       }
       if (imageFile) {
         e.preventDefault();
-        downscaleImage(imageFile, function (dataUrl) { insertImageAtCursor(dataUrl); debounceSync(); });
+        downscaleImage(imageFile, function (dataUrl) { insertImageAtCursor(dataUrl); captureDraftAndDebounceSync(); });
         return;
       }
       e.preventDefault();
       var text = cd.getData('text/plain');
       document.execCommand('insertText', false, text);
+      captureDraftAndDebounceSync();
     });
   }
 
