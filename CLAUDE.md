@@ -24914,6 +24914,34 @@ After deployment, a second live Chromium audit confirmed the updated badge, norm
 
 Harvey asked for a recoverable, server-side running copy of what he writes in a card, separate from the normal card save. The existing browser-local snapshots remain the immediate first line of defense, but they cannot be opened on another device or after the browser profile is lost. The new `piece_text_backups` SQLite table is independent of the version-checked `pieces` records. The editor sends its title and plain-text notes about three seconds after editing begins, keeps trying every 15 seconds while dirty, and makes a best-effort `keepalive` send when the tab is hidden or the modal closes. A rejected/conflicting card PUT does not block this backup endpoint. Changed-text history is kept for 90 days, capped at the newest 1,000 versions per card; identical snapshots are deduplicated. Admin-only `/api/piece-text-backups` and `/api/piece-text-backups/:id` read routes back the server section of `/draft-recovery.html`, where earlier versions can be copied. The backup write route is admin-only too; reviewer sessions have no access. This is recovery data, not an alternative card-save source of truth. A network outage or browser termination before any send completes still depends on the local browser copy; there is no honest guarantee against simultaneous loss of both local storage and network connectivity.
 
+## BookVault dispatch polling stays current as the order queue grows (2026-11-28)
+
+Harvey asked that customer "book shipped" emails go out as close to actual
+BookVault dispatch as practical. A read-only audit found 93 paid orders still
+accepted by BookVault and not dispatched; 63 of their automatic status checks
+were overdue at the time of the fix. The books not being ready was normal.
+The polling delay was not: the five-minute Worker cron handled only ten orders
+per run and selected accepted orders by `created_at`. Since accepted orders
+are due again every 15 minutes, the oldest subset repeatedly consumed the
+capacity and newer orders could be starved indefinitely. This could delay
+recognition of a dispatch and its customer email, even though the existing
+`Progress.IsDispatched` detection and email idempotency were correct.
+
+`storefront-worker/src/fulfillment.js` now selects eligible orders by status
+priority, then oldest `fulfillment_next_attempt_at` (with `created_at` as a
+tie-breaker). New paid orders and fulfillment retries retain their priority.
+The sweep capacity is 40 orders every five minutes, enough for 120 accepted
+orders in a 15-minute cycle with some headroom for newly paid orders at the
+current queue size. This is still polling, not a BookVault push notification:
+under normal operation a dispatch should be detected at the next due status
+check, usually within about 15 minutes, plus the time needed for that sweep
+and the email provider. The due-time ordering prevents indefinite starvation
+even if the queue later exceeds that capacity; monitor volume and increase
+capacity or change architecture if the accepted queue grows substantially.
+Automated tests cover new-payment priority, due-time fairness, and a 40-order
+sweep without duplicate claims. No historical customer charge or BookVault
+order was changed and no fulfillment was retried manually.
+
 ## Publishing Queue preview keeps playing through Kanban refreshes (2026-11-28)
 
 Harvey reported that a Publishing Queue preview played briefly and jumped back to its start. The Content Ops refresh can rebuild the whole Kanban board every few seconds. `render()` already transplanted the active Final Check `<video>` and its bound controls into the new board, but selected only `.final-check-card`; Publishing Queue players were discarded and recreated. The same preservation now covers queue cards while playing or paused partway through. If a card genuinely leaves its stage, its player is paused rather than held invisibly. The regression test checks both selectors, and a headless Chromium DOM test confirmed that the queue video and its control button remain the same nodes with the existing handler after a refresh. This changes only the Content Studio frontend, not publishing, video files, or card data.

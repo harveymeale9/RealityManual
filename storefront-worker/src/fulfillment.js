@@ -229,11 +229,13 @@ export async function claimNext(db) {
         WHEN 'FULFILLMENT_RETRY' THEN 1
         WHEN 'REFUNDED' THEN 2
         WHEN 'BOOKVAULT_ACCEPTED' THEN 3
-        ELSE 4 END, created_at LIMIT 1
+        ELSE 4 END, fulfillment_next_attempt_at, created_at LIMIT 1
     ) RETURNING *`).first();
 }
 
-export async function processPendingOrders(env, limit = 10) {
+// Cron runs every five minutes. Forty slots cover 120 accepted orders within
+// their 15-minute polling interval while leaving headroom for new payments.
+export async function processPendingOrders(env, limit = 40) {
   if (env.FULFILLMENT_ENABLED !== 'true') return 0;
   let count = 0;
   while (count < limit) {
