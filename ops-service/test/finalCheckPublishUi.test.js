@@ -32,9 +32,11 @@ test('Production, Final Check and the edit form ask for one publishing title', f
   assert.doesNotMatch(page, /fieldYtTitle2|fieldYtTitle3|YouTube can rotate/);
 });
 
-test('Kanban refresh retains an in-progress Final Check video and its bound controls', function () {
+test('Kanban refresh retains in-progress Final Check and Publishing Queue players with bound controls', function () {
   const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
-  assert.match(source, /activeFinalCheckPlayers\.push\(\{ id: card\.dataset\.id, wrap: wrap, controls: controls \}\)/);
+  assert.match(source, /board\.querySelectorAll\('\.final-check-card\[data-id\], \.publishing-queue-group \.card\[data-id\]'\)/);
+  assert.match(source, /activeBoardPlayers\.push\(\{ id: card\.dataset\.id, queue: card\.classList\.contains\('card'\), wrap: wrap, controls: controls \}\)/);
+  assert.match(source, /var selector = saved\.queue \? '\.publishing-queue-group \.card\[data-id\]' : '\.final-check-card\[data-id\]'/);
   assert.match(source, /newWrap\.replaceWith\(saved\.wrap\)/);
   assert.match(source, /newControls\.replaceWith\(saved\.controls\)/);
   assert.match(source, /if \(wrap\.dataset\.playerBound === 'true'\) return/);

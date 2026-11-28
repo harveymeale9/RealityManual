@@ -4543,18 +4543,16 @@
 
   function render() {
     var scrollLeft = boardWrap.scrollLeft;
-    // A background Production/queue refresh can redraw the entire board every
-    // three seconds. Keep an in-progress Final Check player as the very same
-    // DOM node: replacing <video> restarts playback from zero even though the
-    // review file itself is complete. Preserve its controls too, because their
-    // event handlers close over this player and its wrapper.
-    var activeFinalCheckPlayers = [];
-    board.querySelectorAll('.final-check-card[data-id]').forEach(function (card) {
+    // Background Production/queue refreshes redraw the board. Keep any
+    // in-progress Final Check OR Publishing Queue player as the same DOM node:
+    // replacing <video> restarts playback, and its controls close over it.
+    var activeBoardPlayers = [];
+    board.querySelectorAll('.final-check-card[data-id], .publishing-queue-group .card[data-id]').forEach(function (card) {
       var wrap = card.querySelector('.fc-video-wrap');
       var video = wrap && wrap.querySelector('video');
       var controls = wrap && wrap.nextElementSibling;
       if (!video || !controls || video.ended || (video.paused && !(video.currentTime > 0))) return;
-      activeFinalCheckPlayers.push({ id: card.dataset.id, wrap: wrap, controls: controls });
+      activeBoardPlayers.push({ id: card.dataset.id, queue: card.classList.contains('card'), wrap: wrap, controls: controls });
       wrap.remove();
       controls.remove();
     });
@@ -4603,8 +4601,9 @@
           (isAutoCol ? '' : '<button class="column-add" data-stage="' + s.id + '">+ Add card</button>') +
         '</div>';
     }).join('');
-    activeFinalCheckPlayers.forEach(function (saved) {
-      var card = Array.from(board.querySelectorAll('.final-check-card[data-id]')).find(function (candidate) {
+    activeBoardPlayers.forEach(function (saved) {
+      var selector = saved.queue ? '.publishing-queue-group .card[data-id]' : '.final-check-card[data-id]';
+      var card = Array.from(board.querySelectorAll(selector)).find(function (candidate) {
         return candidate.dataset.id === saved.id;
       });
       if (!card) {
