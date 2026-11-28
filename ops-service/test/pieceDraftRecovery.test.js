@@ -58,3 +58,29 @@ test('an acknowledged identical draft can be cleared despite a changed timestamp
   assert.equal(values.has('rm-content-piece-recovery-v1'), false);
   assert.equal(messages.length, 0);
 });
+
+test('an older save acknowledgement cannot label newer unsaved text as Saved', () => {
+  const { context, values, messages } = draftHarness();
+  const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+  const start = source.indexOf('  function flashSaved()');
+  const end = source.indexOf('  function hasText(', start);
+  assert.ok(start >= 0 && end > start);
+  vm.runInContext(source.slice(start, end), context);
+  context.activeId = 'test-piece';
+  context.document.getElementById = () => null;
+  context.saveFlag = {
+    textContent: '', classList: { add() {}, remove() {}, toggle() {} }
+  };
+  values.set('rm-content-piece-drafts-v1', JSON.stringify({
+    'test-piece': { revision: 'newer-edit', piece: { id: 'test-piece', notesHtml: '<p>Newer edit</p>' } }
+  }));
+  context.acknowledgePieceSave('test-piece', 'older-save');
+  assert.equal(context.saveFlag.textContent, 'Saving…');
+  assert.match(values.get('rm-content-piece-drafts-v1'), /Newer edit/);
+  context.showPieceSaveFailure('test-piece');
+  assert.equal(context.saveFlag.textContent, 'Not saved');
+  assert.match(messages.at(-1), /could not be saved/);
+  context.acknowledgePieceSave('test-piece', 'newer-edit');
+  assert.equal(context.saveFlag.textContent, 'Saved');
+  assert.equal(values.get('rm-content-piece-drafts-v1'), '{}');
+});
