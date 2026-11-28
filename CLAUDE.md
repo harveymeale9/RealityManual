@@ -24939,8 +24939,12 @@ and the email provider. The due-time ordering prevents indefinite starvation
 even if the queue later exceeds that capacity; monitor volume and increase
 capacity or change architecture if the accepted queue grows substantially.
 Automated tests cover new-payment priority, due-time fairness, and a 40-order
-sweep without duplicate claims. No historical customer charge or BookVault
-order was changed and no fulfillment was retried manually.
+sweep without duplicate claims. All 43 Worker tests passed. Production Worker
+version `f094e6af-8124-44b4-b79d-e74ca63b7dcc` was deployed with checkout
+still enabled. The live D1 backlog of checks over 30 minutes late fell from
+56 to 26 after the 11:40 UTC sweep, then to zero after the 11:45 UTC sweep;
+the accepted-order count remained 93. No historical customer charge or
+BookVault order was changed and no fulfillment was retried manually.
 
 ## Publishing Queue preview keeps playing through Kanban refreshes (2026-11-28)
 
