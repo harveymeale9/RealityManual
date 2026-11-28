@@ -2524,6 +2524,9 @@
   var piecesLoadedPromise = null;
   var conflictToastTimer = null;
   var PIECE_DRAFTS_KEY = 'rm-content-piece-drafts-v1';
+  var PIECE_RECOVERY_KEY = 'rm-content-piece-recovery-v1';
+  var activeConflictId = null;
+  var pieceDraftStorageFailed = false;
 
   function readPieceDrafts() {
     try { return JSON.parse(localStorage.getItem(PIECE_DRAFTS_KEY) || '{}') || {}; }
@@ -2535,12 +2538,29 @@
     catch (error) { return false; }
   }
 
+  function protectPieceDraft(id, draft) {
+    if (!draft || !draft.piece) return;
+    try {
+      var copies = JSON.parse(localStorage.getItem(PIECE_RECOVERY_KEY) || '{}') || {};
+      var history = copies[id] || [];
+      if (history.some(function (entry) { return entry.revision === draft.revision; })) return;
+      history.push(draft);
+      copies[id] = history.slice(-10);
+      localStorage.setItem(PIECE_RECOVERY_KEY, JSON.stringify(copies));
+    } catch (error) {
+      showPieceConflict('Local draft storage is full. Copy your notes now before closing this tab.', true);
+    }
+  }
+
   function storePieceDraftSnapshot(piece) {
     if (!piece || !piece.id) return '';
     var drafts = readPieceDrafts();
     var revision = Date.now() + '-' + Math.random().toString(36).slice(2);
     drafts[piece.id] = { revision: revision, piece: Object.assign({}, piece) };
-    return writePieceDrafts(drafts) ? revision : '';
+    if (writePieceDrafts(drafts)) { pieceDraftStorageFailed = false; return revision; }
+    pieceDraftStorageFailed = true;
+    showPieceConflict('Local draft storage is full. Copy your notes now before closing this tab.', true);
+    return '';
   }
 
   function clearPieceDraftSnapshot(id, revision) {
@@ -2550,37 +2570,34 @@
     writePieceDrafts(drafts);
   }
 
-  // Network autosave is deliberately debounced, but a reload can happen
-  // inside that delay. Recover the synchronous local snapshot first, then
-  // immediately persist it through the normal version-checked API. A draft
-  // is only cleared when the exact revision that was sent is acknowledged.
+  // A local draft can be different even when the server's timestamp is newer
+  // (for example, an old-text save from another device). Never delete or
+  // auto-submit a divergent draft based on timestamps: preserve both copies
+  // and let the writer inspect the browser copy before resuming work.
   function recoverPieceDrafts(rows) {
     var drafts = readPieceDrafts();
-    var jobs = [];
+    var unresolved = 0;
     Object.keys(drafts).forEach(function (id) {
       var draft = drafts[id];
       if (!draft || !draft.piece || !draft.piece.id) return;
       var existing = pieces[id];
-      var draftTime = Date.parse(draft.piece.updatedAt || 0);
-      var serverTime = Date.parse(existing && existing.updatedAt || 0);
-      if (existing && (!Number.isFinite(draftTime) || draftTime <= serverTime)) {
+      var keys = Object.keys(Object.assign({}, draft.piece, existing || {})).filter(function (key) {
+        return key !== 'updatedAt' && key !== '_recordVersion';
+      });
+      if (existing && keys.every(function (key) {
+        return JSON.stringify(draft.piece[key]) === JSON.stringify(existing[key]);
+      })) {
         clearPieceDraftSnapshot(id, draft.revision);
         return;
       }
-      var recovered = Object.assign({}, existing || {}, draft.piece);
-      pieces[id] = recovered;
-      if (!existing) rows.push(recovered);
-      jobs.push(Store.put('pieces', recovered).then(function () {
-        clearPieceDraftSnapshot(id, draft.revision);
-      }).catch(function () {
-        // Retain the local recovery copy. A later reload can retry it and,
-        // crucially, the user's words are never silently discarded.
-      }));
+      protectPieceDraft(id, draft);
+      unresolved++;
     });
-    return Promise.allSettled(jobs);
+    if (unresolved) showPieceConflict(unresolved + ' unsynced local draft' + (unresolved === 1 ? ' was' : 's were') + ' found. Open Draft Recovery to copy and review your work before editing.', true);
+    return Promise.resolve(rows);
   }
 
-  function showPieceConflict(message) {
+  function showPieceConflict(message, sticky) {
     var toast = document.getElementById('pieceConflictToast');
     if (!toast) {
       toast = document.createElement('div');
@@ -2590,16 +2607,26 @@
       document.body.appendChild(toast);
     }
     toast.textContent = message || 'This card changed on another device. Your stale change was not saved, and the newest version has been loaded.';
+    var recoveryLink = document.createElement('a');
+    recoveryLink.href = '/draft-recovery.html';
+    recoveryLink.textContent = ' Open Draft Recovery';
+    toast.appendChild(recoveryLink);
     toast.classList.add('show');
     clearTimeout(conflictToastTimer);
-    conflictToastTimer = setTimeout(function () { toast.classList.remove('show'); }, 7000);
+    if (!sticky) conflictToastTimer = setTimeout(function () { toast.classList.remove('show'); }, 12000);
   }
 
   window.addEventListener('rm-store-conflict', function (event) {
     var detail = event.detail || {};
     if (detail.storeName !== 'pieces') return;
     clearTimeout(saveTimer);
-    showPieceConflict(detail.message);
+    if (activeId && activeId === detail.id && pieces[activeId]) {
+      var snapshot = Object.assign({}, pieces[activeId], currentFormValues(), { updatedAt: nowIso() });
+      var revision = storePieceDraftSnapshot(snapshot);
+      protectPieceDraft(activeId, { revision: revision, piece: snapshot });
+      activeConflictId = activeId;
+    }
+    showPieceConflict('This card changed while you were editing. Your text is still visible here and a protected copy is in Draft Recovery. Copy it before reloading.', true);
     Store.getAll('pieces').then(function (rows) {
       var fresh = {};
       rows.forEach(function (piece) { fresh[piece.id] = piece; });
@@ -2608,8 +2635,10 @@
         var latest = pieces[activeId];
         if (latest) {
           isNewUnsaved = false;
-          populateFields(latest);
-          metaUpdated.textContent = 'Updated ' + fmtFull(latest.updatedAt);
+          if (activeId !== activeConflictId) {
+            populateFields(latest);
+            metaUpdated.textContent = 'Updated ' + fmtFull(latest.updatedAt);
+          }
         } else {
           activeId = null;
           hideModal();
@@ -3749,6 +3778,7 @@
 
   function syncFromForm() {
     if (!activeId) return;
+    if (activeId === activeConflictId) return;
     var p = pieces[activeId];
     if (!p) return;
     var prevStage = p.stage;
@@ -3806,7 +3836,27 @@
     debounceSync();
   }
 
+  // Some mobile browsers suspend a tab before its debounce runs. Persist the
+  // currently visible form again when it is backgrounded or navigated away.
+  function snapshotVisiblePiece() {
+    if (!activeId || !pieces[activeId]) return;
+    storePieceDraftSnapshot(Object.assign({}, pieces[activeId], currentFormValues(), { updatedAt: nowIso() }));
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') snapshotVisiblePiece();
+  });
+  window.addEventListener('pagehide', snapshotVisiblePiece);
+  window.addEventListener('beforeunload', function (event) {
+    if (!pieceDraftStorageFailed || !activeId) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+
   function closeModal() {
+    if (pieceDraftStorageFailed && activeId) {
+      alert('This browser could not store your draft. Copy your notes before closing this card.');
+      return;
+    }
     clearTimeout(saveTimer);
     disarmDelete();
     if (activeId) {
