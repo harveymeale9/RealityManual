@@ -63,6 +63,7 @@ const feedbackVouchersService = require('./src/feedbackVouchers');
 const readerAffinityService = require('./src/readerAffinity');
 const rangeResponse = require('./src/rangeResponse');
 const kanbanBackupService = require('./src/kanbanBackupService');
+const pieceTextBackupsService = require('./src/pieceTextBackups');
 const contentAnalyticsService = require('./src/contentAnalyticsService');
 const youtubeClickthrough = require('./src/youtubeClickthrough');
 const longformProfitEstimate = require('./src/longformProfitEstimate');
@@ -157,6 +158,7 @@ function isValidId(id) { return typeof id === 'string' && ID_RE.test(id); }
 // --- DB setup ---
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
+const pieceTextBackups = pieceTextBackupsService.setup(db);
 db.exec(
   'CREATE TABLE IF NOT EXISTS records (' +
   '  store_name TEXT NOT NULL,' +
@@ -566,6 +568,25 @@ function requireAuth(req, res, next) {
   req.sessionRole = 'admin';
   next();
 }
+
+// Append-only recovery copies are intentionally independent of the versioned
+// card PUT. A conflict or network failure in that path cannot erase text here.
+app.post('/api/piece-text-backups/:id', requireAuth, function (req, res) {
+  const id = req.params.id;
+  const body = req.body || {};
+  if (!isValidId(id) || typeof body.title !== 'string' || body.title.length > 500 ||
+      typeof body.notesText !== 'string' || body.notesText.length > 250000) {
+    return res.status(400).json({ error: 'invalid_backup' });
+  }
+  res.json(pieceTextBackups.save(id, body.title, body.notesText));
+});
+app.get('/api/piece-text-backups', requireAuth, function (req, res) {
+  res.json(pieceTextBackups.recent(req.query.limit));
+});
+app.get('/api/piece-text-backups/:id', requireAuth, function (req, res) {
+  if (!isValidId(req.params.id)) return res.status(400).json({ error: 'invalid_id' });
+  res.json(pieceTextBackups.history(req.params.id, req.query.limit));
+});
 
 const DESKTOP_PAIR_TTL_MS = 10 * 60 * 1000;
 const DESKTOP_TOKEN_PREFIX = 'rmu_';

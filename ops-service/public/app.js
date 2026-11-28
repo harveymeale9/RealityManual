@@ -2963,6 +2963,9 @@
   var activeId = null;
   var isNewUnsaved = false;
   var saveTimer = null;
+  var textBackupTimer = null;
+  var textBackupDirty = false;
+  var textBackupInFlight = false;
   var deleteArmed = false;
   var deleteArmTimer = null;
   var currentVideoObjectUrl = null;
@@ -3868,16 +3871,61 @@
       var snapshot = Object.assign({}, pieces[activeId], currentFormValues(), { updatedAt: nowIso() });
       var revision = storePieceDraftSnapshot(snapshot);
       showSaveState(revision && activeId !== activeConflictId ? 'pending' : 'failed');
+      queueTextBackup();
     }
     if (activeId === activeConflictId) return;
     debounceSync();
   }
+
+  // A second, text-only write path. It never uses Store.put or its optimistic
+  // version, so a failed/conflicting card save still leaves recoverable prose.
+  function currentTextBackup() {
+    if (!activeId || !pieces[activeId]) return null;
+    return { id: activeId, title: fieldTitle.value, notesText: fieldNotes.innerText || fieldNotes.textContent || '' };
+  }
+  function sendTextBackup(snapshot, keepalive) {
+    return fetch('/api/piece-text-backups/' + encodeURIComponent(snapshot.id), {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: snapshot.title, notesText: snapshot.notesText }),
+      keepalive: !!keepalive
+    }).then(function (response) {
+      if (!response.ok) throw new Error('Text backup failed: ' + response.status);
+      return response;
+    });
+  }
+  function flushTextBackup(keepalive) {
+    clearTimeout(textBackupTimer);
+    textBackupTimer = null;
+    if (!textBackupDirty) return;
+    var snapshot = currentTextBackup();
+    if (!snapshot) return;
+    if (textBackupInFlight && !keepalive) return;
+    textBackupDirty = false;
+    if (!keepalive) textBackupInFlight = true;
+    sendTextBackup(snapshot, keepalive).then(function () {
+      if (!keepalive) textBackupInFlight = false;
+      if (textBackupDirty) queueTextBackup();
+    }).catch(function () {
+      textBackupDirty = true;
+      if (!keepalive) textBackupInFlight = false;
+    });
+  }
+  function queueTextBackup() {
+    if (IS_REVIEWER) return;
+    textBackupDirty = true;
+    if (!textBackupTimer) textBackupTimer = setTimeout(function () { flushTextBackup(false); }, 3000);
+  }
+  setInterval(function () {
+    if (textBackupDirty) flushTextBackup(false);
+  }, 15000);
 
   // Some mobile browsers suspend a tab before its debounce runs. Persist the
   // currently visible form again when it is backgrounded or navigated away.
   function snapshotVisiblePiece() {
     if (!activeId || !pieces[activeId]) return;
     storePieceDraftSnapshot(Object.assign({}, pieces[activeId], currentFormValues(), { updatedAt: nowIso() }));
+    flushTextBackup(true);
   }
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'hidden') snapshotVisiblePiece();
@@ -3897,12 +3945,16 @@
     clearTimeout(saveTimer);
     disarmDelete();
     if (activeId) {
+      flushTextBackup(true);
       syncFromForm();
       if (isNewUnsaved) {
         clearPieceDraftSnapshot(activeId);
         delete pieces[activeId];
       }
     }
+    textBackupDirty = false;
+    clearTimeout(textBackupTimer);
+    textBackupTimer = null;
     activeId = null;
     isNewUnsaved = false;
     hideModal();

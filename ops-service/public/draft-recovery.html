@@ -10,11 +10,14 @@
   </style>
 </head>
 <body><main>
-  <h1>Recover local Content Studio drafts</h1>
-  <p>This page reads only drafts stored in <strong>this browser on this device</strong>. It does not save, delete, or send anything. Open it on the laptop where you wrote the missing text. Copy or download any draft before returning to the editor.</p>
+  <h1>Recover Content Studio text</h1>
+  <p>Local drafts are from <strong>this browser on this device</strong>. Server text backups are available from any device after signing in. This page only reads copies; it does not change a card. Copy or download the text you need before returning to the editor.</p>
   <p><button id="download" type="button">Download all recovery data</button> <a href="/#content-ops">Back to Content Studio</a></p>
   <p id="status" role="status"></p>
   <div id="drafts"></div>
+  <h2>Server text backups</h2>
+  <p id="server-status" role="status">Loading…</p>
+  <div id="server-drafts"></div>
 </main>
 <script>
 (function(){
@@ -60,6 +63,35 @@
     link.href=url;link.download='content-studio-draft-recovery-'+new Date().toISOString().slice(0,10)+'.json';
     link.click();setTimeout(function(){URL.revokeObjectURL(url);},30000);
   });
+  var serverTarget=document.getElementById('server-drafts');
+  var serverStatus=document.getElementById('server-status');
+  function showServerCopy(entry,container){
+    var article=document.createElement('article');
+    var heading=document.createElement('h3');heading.textContent=entry.title||'Untitled';article.appendChild(heading);
+    var info=document.createElement('small');info.textContent='Saved '+entry.created_at+' · card '+entry.piece_id+' · backup '+entry.id;article.appendChild(info);
+    var text=document.createElement('textarea');text.readOnly=true;text.value=entry.notes_text;article.appendChild(text);
+    var copy=document.createElement('button');copy.type='button';copy.textContent='Copy text';
+    copy.addEventListener('click',function(){navigator.clipboard.writeText(text.value).then(function(){copy.textContent='Copied';},function(){text.select();document.execCommand('copy');copy.textContent='Copied';});});
+    article.appendChild(copy);container.appendChild(article);
+  }
+  fetch('/api/piece-text-backups?limit=100',{credentials:'same-origin'}).then(function(response){
+    if(!response.ok)throw new Error(response.status===401?'Sign in to Content Studio to see server backups.':'Server backups could not be loaded.');
+    return response.json();
+  }).then(function(entries){
+    serverStatus.textContent=entries.length?entries.length+' cards with server text backups.':'No server text backups yet.';
+    entries.forEach(function(entry){
+      var group=document.createElement('div');showServerCopy(entry,group);
+      var history=document.createElement('button');history.type='button';history.textContent='Show earlier versions';group.appendChild(history);
+      history.addEventListener('click',function(){
+        history.disabled=true;
+        fetch('/api/piece-text-backups/'+encodeURIComponent(entry.piece_id)+'?limit=100',{credentials:'same-origin'})
+          .then(function(response){if(!response.ok)throw new Error('History unavailable');return response.json();})
+          .then(function(versions){versions.slice(1).forEach(function(version){showServerCopy(version,group);});history.remove();})
+          .catch(function(){history.disabled=false;history.textContent='Could not load history. Try again';});
+      });
+      serverTarget.appendChild(group);
+    });
+  }).catch(function(error){serverStatus.textContent=error.message;});
 })();
 </script>
 </body></html>
